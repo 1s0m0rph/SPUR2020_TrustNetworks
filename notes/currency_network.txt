@@ -1,0 +1,48 @@
+def currency network:
+	nodes are people
+	an edge (u,v) exists between nodes u and v iff u gives currency guaranty to v
+	w: E -> RR the weight function describes the amount of guaranty between edges (essentially the amount of money one person gurantees another)
+
+central questions:
+	how does money transfer work? (node a wants to transfer n units of currency to node b, how do they do this?)
+	
+		It's likely that node a has currency guaranteed from many different people in the network, so some algorithm will pick whose currency a uses in the transfer (this they must agree with b on somehow).
+		This figured out, the actual transfer can take place. from here we'll assume it all comes from one guarantor c (wlog because this can just be repeated for all sources of guaranty):
+			b verifies that a has n units of currency guaranteed by c
+				this is done by b first retrieving c's public key, then initiating a dialogue in which c verifies that a owns at least n units of c's guaranty in c's ledger
+			a sends a message to c (they can get the public key from b and verify it on their guaranty certificates) asking to transfer n units of c's currency to b (c can verify that it is a asking because a's signature is on c's guarantor certs)
+			c performs the transfer after verifying it with b and sends along a guaranty certificate for b's ledger
+			
+		in network terms, when a transfers n units of c's currency to b, the weight function does this:
+			original:
+				w(c,a) = m >= n
+				w(c,b) = k >= 0
+				
+			post-transaction:
+				w(c,a) = m - n >= 0
+				w(c,b) = k + n >= n
+		
+		
+		something of a dichotomy occurs here: either a or c can, depending on the configuration of this transfer, screw things up by not doing what they're supposed to. In this configuration, c can fail to change their ledger to show that b owns the currency. In configurations where c does not have the ledger, a can try to use the currency twice. How to solve?
+		
+			One option which has come up before is the notion of a chain of transactions -- every time this currency is transferred from owner to owner they have to make a transfer-of-currency certificate. This still seems like a (or the node before it in the chain) could try to reuse the currency later though
+			
+			Another option would be to require (in order for transactions to be considered valid) c to maintain a record of all signed transactions as a part of its ledger and for that ledger to be publicly available. For each version of the ledger, b can sign off on it (that is, the entire ledger [or a blockchained version of it] so nothing before that point in the ledger can be changed without changing the validity of it) if it is changed in the way they expect to show the transaction from a to b. this means that any new b' that comes along can verify that a does not in fact own those units anymore because c's public ledger shows them as having been transferred to b.
+				small problem with this is that transactions are deanonymized (because the name/pubk of the transactees need to be written in the ledger)
+				if we blockchain c's ledger, we might have an easier time with anonymous transfers since all that needs to be done for a new transferee to verify c's integrity is to verify that blockchain with b
+			
+	how is new currency created?
+		
+		When the network is used to share a public key, every node along every disjoint path that is *actually* used to transfer the keys is given a guaranty from both s and t (if the share was between them). If there are n such nodes in the paths, s and t both guaranty 0.5/n currency to each node in the path. Thus, if a (in fact: the only) path involves only one intermediate node, that node gets a payout of 1 (0.5 from s, 0.5 from t). This encourages shorter paths (more payout for individuals if the path is shorter, assuming individuals are greedy), which is good for s and t
+	
+	can currency be destroyed?
+	
+		It might make sense for currency to be destroyed in limited circumstances. If w(x,y) = n and y wants to buy something from x that they agree is worth n of x's currency, we could simply perform the following weight transfer:
+			initial:
+				w(x,y) = n
+			post-transaction:
+				w(x,y) = 0 (destroyed n units of x's currency)
+		
+		This is as opposed to x paying y with other people's currencies
+		
+		alternatively, certain graph motifs (particularly 3-node motifs) may lead to this naturally. If, by means of an exchange from y to z having happened, a reciprocated edge between x and z is created, currency along those edges can simply be reduced (by agreement between x and z) until there is no reciprocated edge (at least one of the edges reaches zero weight)
