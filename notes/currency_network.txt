@@ -30,6 +30,8 @@ central questions:
 			Another option would be to require (in order for transactions to be considered valid) c to maintain a record of all signed transactions as a part of its ledger and for that ledger to be publicly available. For each version of the ledger, b can sign off on it (that is, the entire ledger [or a blockchained version of it] so nothing before that point in the ledger can be changed without changing the validity of it) if it is changed in the way they expect to show the transaction from a to b. this means that any new b' that comes along can verify that a does not in fact own those units anymore because c's public ledger shows them as having been transferred to b.
 				small problem with this is that transactions are deanonymized (because the name/pubk of the transactees need to be written in the ledger)
 				if we blockchain c's ledger, we might have an easier time with anonymous transfers since all that needs to be done for a new transferee to verify c's integrity is to verify that blockchain with b
+				
+				basically the problem with even this idea is that c can always delete the last item in their ledger (not anything in the middle because of blockchain stuff) and no one would really know any better. This probably gets into the idea of "proof of *" where here * could be trust or something
 			
 	how is new currency created?
 		

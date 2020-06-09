@@ -164,74 +164,78 @@ class TNNode_Stepper(TNNode):
 		self.search_blacklist_flag = True
 		return self.pulse_pred[pulse_num].v2_vd_blacklist_zip(pulse_num,[self] + path)
 
-'''
-shelved for now since other solutions will be easier
-'''
-# class Sim:
-#
-# 	def __init__(self,tng):
-# 		self.operations_queue = []#a queue of all the operations that need to be performed. this will be updated once per time step. this will likely need to be a list of tuples with (function to call, [args*], [kwargs*])
-# 		self.t = 0#start at time 0
-# 		self.tng = tng#the graph to process on
-#
-# 	'''
-# 	do all of the operations for this step, then queue up the next step
-# 	'''
-# 	def process_single_step(self):
-# 		this_step_queue = self.operations_queue.copy()
-# 		self.operations_queue.clear()#clear this so we can add operations on the fly
-# 		#now process this step's operations
-# 		for fn, args, kwargs in this_step_queue:
-# 			ret = fn(*args,**kwargs)
-#
-#
-# 	'''
-# 	do steps until there are no operations left to process
-# 	'''
-# 	def process_until_static(self):
-# 		while len(self.operations_queue) > 0:
-# 			self.process_single_step()
+#how many paths does this method find on average, as a percentage of the maximum (empirical)?
 
+N = 100
 
-s = 0
-t = 5
-
-#apparently networkx has an edmonds-karp implementation, let's try that
 np.random.seed(0)
-tng = generate_rand_graph_from_deg_dist(1000,approx_reciprocity=1,node_type=TNNode_Stepper)
+tng = generate_rand_graph_from_deg_dist(N,approx_reciprocity=1,node_type=TNNode_Stepper)
 
-exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
+prop_sum = 0
+npairs = 0
+pair_count = 0
 
-tng[s].count_vd_paths_to_v2(t)
-all_done_flag = False
-while not all_done_flag:
-	all_done_flag = True
-	for tn in tng:
-		tn.time += 1#increment first so all of the nodes are incremented before we do this time step
-	for tn in tng:
-		tn.increment_time()
-	for tn in tng:
-		if len(tn.operations) > 0:#has to be separate because high node ids can give operations to low ones
+for s in range(N):
+	for t in range(s+1,N):
+		if t not in tng[s].neighbors:
+			npairs += 1#doing this first so we can get progress reports
+
+# s = 0
+# t = 8
+
+for s in range(N):
+	for t in range(s+1,N):
+		if t not in tng[s].neighbors:
+			if pair_count % 100 == 0:
+				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
+			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
+
+			tng[s].count_vd_paths_to_v2(t)
 			all_done_flag = False
+			while not all_done_flag:
+				all_done_flag = True
+				for tn in tng:
+					tn.time += 1  # increment first so all of the nodes are incremented before we do this time step
+				for tn in tng:
+					tn.increment_time()
+				for tn in tng:
+					if len(tn.operations) > 0:  # has to be separate because high node ids can give operations to low ones
+						all_done_flag = False
 
-tng[s].cleanup()
+			tng[s].cleanup()  # this would probably just be done either by a final pulse from s or by timeout
 
-paths = tng[s].paths
+			paths = tng[s].paths
 
-print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
+			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
 
-nodes_seen = set()
+			nodes_seen = set()
 
-for path in paths:
-	prev_node = tng[s]
-	for node in path:
-		#verify that paths exist
-		if node not in prev_node.neighbors:
-			print('EDGE DOES NOT EXIST: ({},{})'.format(prev_node.id,node.id))
-		prev_node = node
-		#verify that paths are disjoint
-		if (node.id != s) and (node.id != t) and (node.id in nodes_seen):
-			print('REPEATED NODE ID: {}'.format(node.id))
-		else:
-			nodes_seen.add(node.id)
-	print(path)
+			for path in paths:
+				prev_node = tng[s]
+				for node in path:
+					# verify that paths exist
+					if node not in prev_node.neighbors:
+						print('EDGE DOES NOT EXIST: ({},{})'.format(prev_node.id,node.id))
+					prev_node = node
+					# verify that paths are disjoint
+					if (node.id != s) and (node.id != t) and (node.id in nodes_seen):
+						print('REPEATED NODE ID: {}'.format(node.id))
+					else:
+						nodes_seen.add(node.id)
+				# print(path)
+
+			prop_sum += float(len(paths)) / float(exact_total_paths)
+			pair_count += 1
+
+			#reset all the graph things (this could be done in reality with either a pulse or a timeout)
+			for i in range(len(tng)):
+				tng[i].pulse_pred = {}
+				tng[i].resetted_flag = False
+				tng[i].search_blacklist_flag = False
+				tng[i].time = 0
+				tng[i].operations = []
+				tng[i].paths = []
+				tng[i].neighbors_to_call = []
+				tng[i].pulse_num = 0
+
+print('AVERAGE PROPORTION OF PATHS FOUND: {:.3f}%'.format(100*(prop_sum/npairs)))
