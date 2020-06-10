@@ -60,19 +60,28 @@ class TNNode_Stepper(TNNode):
 		self.time = 0#this will be used to make sure no function calls happen prematurely
 		self.operations = []#queue of operations we need to perform (fn,args,kwargs)
 		self.paths = []#maintained at the object level to make callbacks easier
+
+		#info for s (search starter)
 		self.neighbors_to_call = []
 		self.pulse_num = 0
+		self.initial_TTL = float('inf')
+
+		#metrics
+		self.operations_done = False#have I had to do any work in the current pass through?
+
 
 	def __repr__(self):
 		return 'SSTNN {}'.format(self.id)
 
 	'''
-	move our self-stored time variable up by 1 and do all of the operations in our queue
+	do all of the operations in our queue (we assume that if the time for those operations hasn't come yet according to our clock, the function we call will automatically not perform them)
 	'''
 	def increment_time(self):
 		# self.time += 1
 		this_step_operations = self.operations.copy()
 		self.operations.clear()
+		if len(this_step_operations) > 0:
+			self.operations_done = True
 		for fn, args, kwargs, callback in this_step_operations:
 			ret = fn(*args, **kwargs)
 			callback(ret)
@@ -83,7 +92,7 @@ class TNNode_Stepper(TNNode):
 			self.paths.append(path)
 			if len(self.neighbors_to_call) > 0:
 				self.pulse_num += 1
-				self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(path[-1].id,self,self.pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback)
+				self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(path[-1].id,self,self.pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,self.initial_TTL)
 
 	def cleanup(self):
 		# now reset pulse numbers and blacklist flags
@@ -95,13 +104,17 @@ class TNNode_Stepper(TNNode):
 	'''
 	2nd naive version of vertex-disjoint path count algorithm between s (this/self) and t
 	this version runs until no paths are found and can return the found paths for verification of VD property
+	
+	additions:
+		TTL (time-to-live): enforces the cutting off of distant nodes to reduce the total computation done on the network
 	'''
-	def count_vd_paths_to_v2(self,dest_id,return_paths=True):
+	def count_vd_paths_to_v2(self,dest_id,return_paths=True,TTL=float('inf')):
 		self.search_blacklist_flag = True
+		self.initial_TTL = TTL
 		#start a search to dest from each neighbor
 		pulse_num = 0
 		self.neighbors_to_call = list(self.neighbors)
-		self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(dest_id,self,pulse_num,self.time+1,self.count_vd_paths_to_v2_callback)
+		self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(dest_id,self,pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,TTL-1)
 
 
 	'''
@@ -123,14 +136,17 @@ class TNNode_Stepper(TNNode):
 	'''
 	someone has asked me to find dest
 	'''
-	def v2_vd_paths_interm_synchronized(self,dest_id,pred,pulse_num,time,callback):
+	def v2_vd_paths_interm_synchronized(self,dest_id,pred,pulse_num,time,callback,TTL):
 		if time > self.time:
 			#then we need to postpone processing this part until our time is updated
-			self.operations.append((self.v2_vd_paths_interm_synchronized,[dest_id,pred,pulse_num,time,callback],{},callback))
+			self.operations.append((self.v2_vd_paths_interm_synchronized,[dest_id,pred,pulse_num,time,callback,TTL],{},callback))
 			return None
 
 		if pulse_num in self.pulse_pred:
 			return None#we've already been visited in this search
+
+		if TTL <= 0:
+			return None#we're at the maximum distance from s
 
 		if self.id == dest_id:
 			#blacklist nodes on this path
@@ -146,7 +162,7 @@ class TNNode_Stepper(TNNode):
 
 		#otherwise ask all our neighbors if they know the muffin man
 		for n in self.neighbors:
-			path = n.v2_vd_paths_interm_synchronized(dest_id,self,pulse_num,time+1,callback)
+			path = n.v2_vd_paths_interm_synchronized(dest_id,self,pulse_num,time + 1,callback,TTL-1)
 			if path is not None:
 				return path
 
@@ -171,7 +187,11 @@ N = 100
 np.random.seed(0)
 tng = generate_rand_graph_from_deg_dist(N,approx_reciprocity=1,node_type=TNNode_Stepper)
 
+#try now with TTL
+init_TTL = 9#we will consider paths of only this length or less
+
 prop_sum = 0
+prop_operations_sum = 0
 npairs = 0
 pair_count = 0
 
@@ -181,7 +201,7 @@ for s in range(N):
 			npairs += 1#doing this first so we can get progress reports
 
 # s = 0
-# t = 8
+# t = 5
 
 for s in range(N):
 	for t in range(s+1,N):
@@ -190,7 +210,7 @@ for s in range(N):
 				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
 			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
 
-			tng[s].count_vd_paths_to_v2(t)
+			tng[s].count_vd_paths_to_v2(t,TTL=init_TTL)
 			all_done_flag = False
 			while not all_done_flag:
 				all_done_flag = True
@@ -227,6 +247,7 @@ for s in range(N):
 			prop_sum += float(len(paths)) / float(exact_total_paths)
 			pair_count += 1
 
+			count_this_pair_operations = 0#how many nodes had to do something this time around?
 			#reset all the graph things (this could be done in reality with either a pulse or a timeout)
 			for i in range(len(tng)):
 				tng[i].pulse_pred = {}
@@ -237,5 +258,12 @@ for s in range(N):
 				tng[i].paths = []
 				tng[i].neighbors_to_call = []
 				tng[i].pulse_num = 0
+				tng[i].initial_TTL = float('inf')
+				if tng[i].operations_done:
+					count_this_pair_operations += 1
+				tng[i].operations_done = False
 
-print('AVERAGE PROPORTION OF PATHS FOUND: {:.3f}%'.format(100*(prop_sum/npairs)))
+			prop_operations_sum += float(count_this_pair_operations) / float(len(tng))
+
+print('AVERAGE PROPORTION OF PATHS FOUND:\t\t{:.3f}%'.format(100*(prop_sum/npairs)))
+print('AVERAGE NUMBER OF NODES WITH OPERATIONS:\t{:.3f}%'.format(100*(prop_operations_sum/npairs)))
