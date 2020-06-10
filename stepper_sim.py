@@ -62,12 +62,12 @@ class TNNode_Stepper(TNNode):
 		self.paths = []#maintained at the object level to make callbacks easier
 
 		#info for s (search starter)
-		self.neighbors_to_call = []
-		self.pulse_num = 0
+		# self.neighbors_to_call = []
+		# self.pulse_num = 0
 		self.initial_TTL = float('inf')
 
 		#metrics
-		self.operations_done = False#have I had to do any work in the current pass through?
+		self.operations_done = 0#have I had to do any work in the current pass through?
 
 
 	def __repr__(self):
@@ -80,8 +80,7 @@ class TNNode_Stepper(TNNode):
 		# self.time += 1
 		this_step_operations = self.operations.copy()
 		self.operations.clear()
-		if len(this_step_operations) > 0:
-			self.operations_done = True
+		self.operations_done += len(this_step_operations)
 		for fn, args, kwargs, callback in this_step_operations:
 			ret = fn(*args, **kwargs)
 			callback(ret)
@@ -90,9 +89,10 @@ class TNNode_Stepper(TNNode):
 	def count_vd_paths_to_v2_callback(self,path):
 		if path is not None:
 			self.paths.append(path)
-			if len(self.neighbors_to_call) > 0:
-				self.pulse_num += 1
-				self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(path[-1].id,self,self.pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,self.initial_TTL)
+			#TODO: logic for sending out more pulses?
+			# if len(self.neighbors_to_call) > 0:
+				# self.pulse_num += 1
+				# self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(path[-1].id,self,self.pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,self.initial_TTL)
 
 	def cleanup(self):
 		# now reset pulse numbers and blacklist flags
@@ -107,14 +107,17 @@ class TNNode_Stepper(TNNode):
 	
 	additions:
 		TTL (time-to-live): enforces the cutting off of distant nodes to reduce the total computation done on the network
+		shadowing paths: t will check all pings that arrive to see if they're valid paths
 	'''
 	def count_vd_paths_to_v2(self,dest_id,return_paths=True,TTL=float('inf')):
 		self.search_blacklist_flag = True
-		self.initial_TTL = TTL
+		self.initial_TTL = TTL#TODO: adaptive TTL?
 		#start a search to dest from each neighbor
 		pulse_num = 0
-		self.neighbors_to_call = list(self.neighbors)
-		self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(dest_id,self,pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,TTL-1)
+		# self.neighbors_to_call = list(self.neighbors)
+		for neighbor in self.neighbors:
+			neighbor.v2_vd_paths_interm_synchronized(dest_id,self,pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,TTL-1)
+			pulse_num += 1
 
 
 	'''
@@ -142,17 +145,18 @@ class TNNode_Stepper(TNNode):
 			self.operations.append((self.v2_vd_paths_interm_synchronized,[dest_id,pred,pulse_num,time,callback,TTL],{},callback))
 			return None
 
-		if pulse_num in self.pulse_pred:
-			return None#we've already been visited in this search
-
 		if TTL <= 0:
 			return None#we're at the maximum distance from s
 
-		if self.id == dest_id:
+		if self.id == dest_id:#this has to happen before the visited check to implement path shadowing
 			#blacklist nodes on this path
 			self.pulse_pred.update({pulse_num:pred})
+			self.search_blacklist_flag = False#t is never blacklisted, but the function after sets it to be so
 			path = self.v2_vd_blacklist_zip(pulse_num,[])
-			return path  #for now we're just counting paths, but we could also reconstruct what they are from this point
+			return path
+
+		if pulse_num in self.pulse_pred:
+			return None#we've already been visited in this search
 
 		if self.search_blacklist_flag:
 			return None  #we are already blacklisted (or have been visited in this search), so don't go this way
@@ -177,6 +181,14 @@ class TNNode_Stepper(TNNode):
 		if pulse_num not in self.pulse_pred:
 			return path  #this could also return the reconstructed path, but would require more data to be passed between nondes
 
+		if self.search_blacklist_flag:
+			#then this won't work, we need to unblacklist everything in the path
+			for node in path:
+				node.search_blacklist_flag = False
+
+			#and return no path
+			return None
+
 		self.search_blacklist_flag = True
 		return self.pulse_pred[pulse_num].v2_vd_blacklist_zip(pulse_num,[self] + path)
 
@@ -188,10 +200,12 @@ np.random.seed(0)
 tng = generate_rand_graph_from_deg_dist(N,approx_reciprocity=1,node_type=TNNode_Stepper)
 
 #try now with TTL
-init_TTL = 9#we will consider paths of only this length or less
+init_TTL = float('inf')#we will consider paths of only this length or less
 
-prop_sum = 0
-prop_operations_sum = 0
+paths_found_sum = 0
+paths_exact_sum = 0
+num_network_used_sum = 0
+node_operations_sum = 0
 npairs = 0
 pair_count = 0
 
@@ -202,6 +216,7 @@ for s in range(N):
 
 # s = 0
 # t = 5
+# npairs = 1
 
 for s in range(N):
 	for t in range(s+1,N):
@@ -244,10 +259,11 @@ for s in range(N):
 						nodes_seen.add(node.id)
 				# print(path)
 
-			prop_sum += float(len(paths)) / float(exact_total_paths)
+			paths_found_sum += len(paths)
+			paths_exact_sum += exact_total_paths
 			pair_count += 1
 
-			count_this_pair_operations = 0#how many nodes had to do something this time around?
+			count_this_pair_network_used = 0#how many nodes had to do something this time around?
 			#reset all the graph things (this could be done in reality with either a pulse or a timeout)
 			for i in range(len(tng)):
 				tng[i].pulse_pred = {}
@@ -259,11 +275,13 @@ for s in range(N):
 				tng[i].neighbors_to_call = []
 				tng[i].pulse_num = 0
 				tng[i].initial_TTL = float('inf')
-				if tng[i].operations_done:
-					count_this_pair_operations += 1
-				tng[i].operations_done = False
+				node_operations_sum += tng[i].operations_done
+				if tng[i].operations_done != 0:
+					count_this_pair_network_used += 1
+				tng[i].operations_done = 0
 
-			prop_operations_sum += float(count_this_pair_operations) / float(len(tng))
+			num_network_used_sum += count_this_pair_network_used
 
-print('AVERAGE PROPORTION OF PATHS FOUND:\t\t{:.3f}%'.format(100*(prop_sum/npairs)))
-print('AVERAGE NUMBER OF NODES WITH OPERATIONS:\t{:.3f}%'.format(100*(prop_operations_sum/npairs)))
+print('AVERAGE NUMBER (PCT) OF PATHS FOUND:\t\t\t\t\t{:.3f} ({:.3f}%)'.format(paths_found_sum/npairs, 100*(paths_found_sum/paths_exact_sum)))
+print('AVERAGE NUMBER (PCT) OF NODES WITH OPERATIONS:\t\t\t{:.0f} ({:.3f}%)'.format(num_network_used_sum/npairs,100 * (num_network_used_sum / (npairs*len(tng)))))
+print('AVERAGE NUMBER OF OPERATIONS PER NODE WITH OPERATIONS:\t{:.3f}'.format(node_operations_sum / num_network_used_sum))
