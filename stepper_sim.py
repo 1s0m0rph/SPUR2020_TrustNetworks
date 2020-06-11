@@ -14,15 +14,15 @@ that the original node points to and moving all of the original node's out-edges
 '''
 def vertex_disjoint_transform(G):
 	Gp = nx.DiGraph()
-	Gp.add_edges_from(G.edges)  #copy G
+	Gp.add_edges_from(G.edges)#copy G
 
-	for v in list(Gp.nodes):  #cast to list so that there are no concurrent modification issues
+	for v in list(Gp.nodes):#cast to list so that there are no concurrent modification issues
 		#for every vertex
-		if (Gp.in_degree(v) > 1) and (Gp.out_degree(v) > 1):  #with in and out degree > 1 (forking vertex)
+		if (Gp.in_degree(v) > 1) and (Gp.out_degree(v) > 1):#with in and out degree > 1 (forking vertex)
 			#do the motif transform
 			fork_node = 'f{}'.format(v)
 			#assign all of v's out-edges to f* and remove them from v
-			for u in list(Gp.neighbors(v)):  #cast to list so that there are no concurrent modification issues
+			for u in list(Gp.neighbors(v)):#cast to list so that there are no concurrent modification issues
 				Gp.add_edge(fork_node,u)
 				Gp.remove_edge(v,u)
 			#point v to the fork node
@@ -62,12 +62,12 @@ class TNNode_Stepper(TNNode):
 		self.paths = []#maintained at the object level to make callbacks easier
 
 		#info for s (search starter)
-		# self.neighbors_to_call = []
+		self.neighbors_to_call = []
 		# self.pulse_num = 0
 		self.initial_TTL = float('inf')
-
-		#metrics
-		self.operations_done = 0#have I had to do any work in the current pass through?
+		self.is_search_originator = False
+		self.search_dest = None
+		self.search_dest_coords = None
 
 
 	def __repr__(self):
@@ -77,7 +77,7 @@ class TNNode_Stepper(TNNode):
 	do all of the operations in our queue (we assume that if the time for those operations hasn't come yet according to our clock, the function we call will automatically not perform them)
 	'''
 	def increment_time(self):
-		# self.time += 1
+		#self.time += 1
 		this_step_operations = self.operations.copy()
 		self.operations.clear()
 		self.operations_done += len(this_step_operations)
@@ -90,16 +90,17 @@ class TNNode_Stepper(TNNode):
 		if path is not None:
 			self.paths.append(path)
 			#TODO: logic for sending out more pulses?
-			# if len(self.neighbors_to_call) > 0:
-				# self.pulse_num += 1
-				# self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(path[-1].id,self,self.pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,self.initial_TTL)
+			#if len(self.neighbors_to_call) > 0:
+				#self.pulse_num += 1
+				#self.neighbors_to_call.pop(0).v2_vd_paths_interm_synchronized(path[-1].id,self,self.pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,self.initial_TTL)
 
 	def cleanup(self):
-		# now reset pulse numbers and blacklist flags
+		#now reset pulse numbers and blacklist flags
 		for n in self.neighbors:
 			n.reset_search()
 
 		self.search_blacklist_flag = False
+		self.is_search_originator = False
 
 	'''
 	2nd naive version of vertex-disjoint path count algorithm between s (this/self) and t
@@ -114,7 +115,7 @@ class TNNode_Stepper(TNNode):
 		self.initial_TTL = TTL#TODO: adaptive TTL?
 		#start a search to dest from each neighbor
 		pulse_num = 0
-		# self.neighbors_to_call = list(self.neighbors)
+		#self.neighbors_to_call = list(self.neighbors)
 		for neighbor in self.neighbors:
 			neighbor.v2_vd_paths_interm_synchronized(dest_id,self,pulse_num,self.time + 1,self.count_vd_paths_to_v2_callback,TTL-1)
 			pulse_num += 1
@@ -132,6 +133,9 @@ class TNNode_Stepper(TNNode):
 		self.resetted_flag = True
 		self.pulse_pred = {}
 		self.search_blacklist_flag = False
+		self.is_search_originator = False
+		self.search_dest = None
+		self.search_dest_coords = None
 
 		for n in self.neighbors:
 			n.reset_search()
@@ -151,6 +155,7 @@ class TNNode_Stepper(TNNode):
 		if self.id == dest_id:#this has to happen before the visited check to implement path shadowing
 			#blacklist nodes on this path
 			self.pulse_pred.update({pulse_num:pred})
+			self.resetted_flag = False
 			self.search_blacklist_flag = False#t is never blacklisted, but the function after sets it to be so
 			path = self.v2_vd_blacklist_zip(pulse_num,[])
 			return path
@@ -159,10 +164,11 @@ class TNNode_Stepper(TNNode):
 			return None#we've already been visited in this search
 
 		if self.search_blacklist_flag:
-			return None  #we are already blacklisted (or have been visited in this search), so don't go this way
+			return None#we are already blacklisted (or have been visited in this search), so don't go this way
 
 		#we've relayed this pulse now
 		self.pulse_pred.update({pulse_num:pred})
+		self.resetted_flag = False
 
 		#otherwise ask all our neighbors if they know the muffin man
 		for n in self.neighbors:
@@ -179,7 +185,7 @@ class TNNode_Stepper(TNNode):
 	'''
 	def v2_vd_blacklist_zip(self,pulse_num,path: list):
 		if pulse_num not in self.pulse_pred:
-			return path  #this could also return the reconstructed path, but would require more data to be passed between nondes
+			return path#this could also return the reconstructed path, but would require more data to be passed between nondes
 
 		if self.search_blacklist_flag:
 			#then this won't work, we need to unblacklist everything in the path
@@ -191,97 +197,3 @@ class TNNode_Stepper(TNNode):
 
 		self.search_blacklist_flag = True
 		return self.pulse_pred[pulse_num].v2_vd_blacklist_zip(pulse_num,[self] + path)
-
-#how many paths does this method find on average, as a percentage of the maximum (empirical)?
-
-N = 100
-
-np.random.seed(0)
-tng = generate_rand_graph_from_deg_dist(N,approx_reciprocity=1,node_type=TNNode_Stepper)
-
-#try now with TTL
-init_TTL = float('inf')#we will consider paths of only this length or less
-
-paths_found_sum = 0
-paths_exact_sum = 0
-num_network_used_sum = 0
-node_operations_sum = 0
-npairs = 0
-pair_count = 0
-
-for s in range(N):
-	for t in range(s+1,N):
-		if t not in tng[s].neighbors:
-			npairs += 1#doing this first so we can get progress reports
-
-# s = 0
-# t = 5
-# npairs = 1
-
-for s in range(N):
-	for t in range(s+1,N):
-		if t not in tng[s].neighbors:
-			if pair_count % 100 == 0:
-				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
-			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
-
-			tng[s].count_vd_paths_to_v2(t,TTL=init_TTL)
-			all_done_flag = False
-			while not all_done_flag:
-				all_done_flag = True
-				for tn in tng:
-					tn.time += 1  # increment first so all of the nodes are incremented before we do this time step
-				for tn in tng:
-					tn.increment_time()
-				for tn in tng:
-					if len(tn.operations) > 0:  # has to be separate because high node ids can give operations to low ones
-						all_done_flag = False
-
-			tng[s].cleanup()  # this would probably just be done either by a final pulse from s or by timeout
-
-			paths = tng[s].paths
-
-			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
-
-			nodes_seen = set()
-
-			for path in paths:
-				prev_node = tng[s]
-				for node in path:
-					# verify that paths exist
-					if node not in prev_node.neighbors:
-						print('EDGE DOES NOT EXIST: ({},{})'.format(prev_node.id,node.id))
-					prev_node = node
-					# verify that paths are disjoint
-					if (node.id != s) and (node.id != t) and (node.id in nodes_seen):
-						print('REPEATED NODE ID: {}'.format(node.id))
-					else:
-						nodes_seen.add(node.id)
-				# print(path)
-
-			paths_found_sum += len(paths)
-			paths_exact_sum += exact_total_paths
-			pair_count += 1
-
-			count_this_pair_network_used = 0#how many nodes had to do something this time around?
-			#reset all the graph things (this could be done in reality with either a pulse or a timeout)
-			for i in range(len(tng)):
-				tng[i].pulse_pred = {}
-				tng[i].resetted_flag = False
-				tng[i].search_blacklist_flag = False
-				tng[i].time = 0
-				tng[i].operations = []
-				tng[i].paths = []
-				tng[i].neighbors_to_call = []
-				tng[i].pulse_num = 0
-				tng[i].initial_TTL = float('inf')
-				node_operations_sum += tng[i].operations_done
-				if tng[i].operations_done != 0:
-					count_this_pair_network_used += 1
-				tng[i].operations_done = 0
-
-			num_network_used_sum += count_this_pair_network_used
-
-print('AVERAGE NUMBER (PCT) OF PATHS FOUND:\t\t\t\t\t{:.3f} ({:.3f}%)'.format(paths_found_sum/npairs, 100*(paths_found_sum/paths_exact_sum)))
-print('AVERAGE NUMBER (PCT) OF NODES WITH OPERATIONS:\t\t\t{:.0f} ({:.3f}%)'.format(num_network_used_sum/npairs,100 * (num_network_used_sum / (npairs*len(tng)))))
-print('AVERAGE NUMBER OF OPERATIONS PER NODE WITH OPERATIONS:\t{:.3f}'.format(node_operations_sum / num_network_used_sum))
