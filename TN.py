@@ -11,9 +11,10 @@ def manh_norm(v):
 	return sum(map(lambda x: abs(x),v))
 
 class TNNode:
-	INITIAL_MAX_NEIGHBOR_SEPARATION = 10#this is k, in the math
-	MAX_NEIGHBOR_SEPARATION_INCREMENT = 2#for dynamic separation increase, what should the increment size be?
-	NUM_COORD_DIMENSIONS = 2
+	INITIAL_MAX_NEIGHBOR_SEPARATION = 1#this is k, in the math
+	MAX_NEIGHBOR_SEPARATION_INCREMENT = 1#for dynamic separation increase, what should the increment size be?
+	NUM_COORD_DIMENSIONS = 16
+	ADDRESS_BIT_SIZE = 256
 
 	def __init__(self,node_id):
 		self.id = node_id
@@ -56,20 +57,20 @@ class TNNode:
 
 		neighbor_coord_centroid = np.mean(np.array([n.coords for n in self.neighbors],dtype=np.uint16),axis=0,dtype=np.uint16)
 		max_separation = self.INITIAL_MAX_NEIGHBOR_SEPARATION
-		disp,choices = self.generate_coords(max_separation,self.NUM_COORD_DIMENSIONS)
+		disp,choices = self.generate_coords(max_separation,self.NUM_COORD_DIMENSIONS,-np.array(neighbor_coord_centroid,dtype=np.int32))
 		#check if these coords are okay by pinging the network
 		while self.check_is_coord_in_use_init(neighbor_coord_centroid+disp):
-			choices_left = False
+			choices_left = True
 			for coord_choices in choices:
-				if len(coord_choices) > 0:
-					choices_left = True
+				if len(coord_choices) == 0:#all have to have valid choices, not just some
+					choices_left = False
 
 			if not choices_left:
 				#increase k
 				max_separation += self.MAX_NEIGHBOR_SEPARATION_INCREMENT
 				choices = None#for the generation method
 
-			disp,choices = self.generate_coords(max_separation,self.NUM_COORD_DIMENSIONS,choices)
+			disp,choices = self.generate_coords(max_separation,self.NUM_COORD_DIMENSIONS,-np.array(neighbor_coord_centroid,dtype=np.int32),choices)
 
 
 		self.coords = neighbor_coord_centroid + disp
@@ -78,11 +79,13 @@ class TNNode:
 	generate n_dim coords such that the norm (manhattan so it's guaranteed to be integers) of the vector formed by those coords is leq max_norm
 
 	coord choices is used to ensure determinism
+	max negative is used to ensure the coordinates are always non-negative
+		this is a list of length n_dim with integer value <= 0 for each element
 	'''
-	def generate_coords(self,max_norm,n_dim,coord_choices=None):
+	def generate_coords(self,max_norm,n_dim,max_negative:list,coord_choices=None):
 		single_bound = int(max_norm / n_dim)#this is manhattan-norm specific; norm of biggest vector will be this times n_dim which will be no larger than max_norm
 		if coord_choices is None:
-			coord_choices = [{i for i in range(single_bound+1)} for _ in range(n_dim)]
+			coord_choices = [{i for i in range(max(-single_bound,max_negative[j]),single_bound+1)} for j in range(n_dim)]#want to be able to go negative
 		coords = []
 		for i in range(n_dim):
 			coord = np.random.choice(list(coord_choices[i]))
@@ -90,7 +93,7 @@ class TNNode:
 			coord_choices[i].remove(coord)
 			coords.append(coord)
 
-		return np.array(coords),coord_choices
+		return np.array(coords,dtype=np.int32),coord_choices
 
 	def check_is_coord_in_use_init(self,coords):
 		self.pulse_pred.update({-1:None})
