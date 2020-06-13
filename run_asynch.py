@@ -45,7 +45,7 @@ for s in range(N):
 				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
 			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
 
-			paths = tng[s].count_vd_paths_to_v3(t,tng[t].coords)
+			paths = tng[s].count_vd_paths_to_v3(t,tng[t].coords,heuristic='dist')
 
 			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
 

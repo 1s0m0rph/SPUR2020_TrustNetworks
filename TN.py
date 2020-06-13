@@ -10,10 +10,52 @@ import scipy.stats
 def manh_norm(v):
 	return sum(map(lambda x: abs(x),v))
 
+def eucl_norm(v):
+	return np.linalg.norm(v)
+
+'''
+transform G st vanilla max flow will count the paths correctly
+
+this we do by adding, for each node with in-degree > 1 and out-degree >1, a dummy node (called a "fork" node)
+that the original node points to and moving all of the original node's out-edges to be the out-edges of the fork node
+'''
+def vertex_disjoint_transform(G):
+	Gp = nx.DiGraph()
+	Gp.add_edges_from(G.edges)#copy G
+
+	for v in list(Gp.nodes):#cast to list so that there are no concurrent modification issues
+		#for every vertex
+		if (Gp.in_degree(v) > 1) and (Gp.out_degree(v) > 1):#with in and out degree > 1 (forking vertex)
+			#do the motif transform
+			fork_node = 'f{}'.format(v)
+			#assign all of v's out-edges to f* and remove them from v
+			for u in list(Gp.neighbors(v)):#cast to list so that there are no concurrent modification issues
+				Gp.add_edge(fork_node,u)
+				Gp.remove_edge(v,u)
+			#point v to the fork node
+			Gp.add_edge(v,fork_node)
+
+	#assign capacity 1 to all edges
+	nx.set_edge_attributes(Gp,1,name='capacity')
+
+	return Gp
+
+'''
+use max flow on a modified version of G to find the number of vertex disjoint paths between s and t
+'''
+def vertex_disjoint_paths(G,s,t):
+	#first modify G so that two-in two-out motifs evaluate correctly
+	Gp = vertex_disjoint_transform(G)
+	#then run max flow on that graph with the caveat that if we used the fork node transform on s we need to change the start to s
+	if 'f{}'.format(s) in Gp.nodes:
+		s = 'f{}'.format(s)
+
+	return nx.algorithms.flow.edmonds_karp(Gp,s,t).graph['flow_value']
+
 class TNNode:
 	INITIAL_MAX_NEIGHBOR_SEPARATION = 1#this is k, in the math
 	MAX_NEIGHBOR_SEPARATION_INCREMENT = 1#for dynamic separation increase, what should the increment size be?
-	NUM_COORD_DIMENSIONS = 16
+	NUM_COORD_DIMENSIONS = 2
 	ADDRESS_BIT_SIZE = 256
 
 	def __init__(self,node_id):
@@ -253,8 +295,6 @@ class TNNode:
 	(doesn't need to be synchronized since it's depth first and therefore won't be done in parallel)
 	"""
 
-	#TODO fix version 3 to not be synchronized
-
 	'''
 	clean up the predecessor tree
 	'''
@@ -273,15 +313,32 @@ class TNNode:
 
 	'''
 	3rd version uses heuristics -- coordinates
+	
+	if you want the heuristic function to be sorted backwards (that is, in descending order), negate the output of the heuristic function
+	
+	built-in heuristics:
+		'dot' (default) : largest among neighbors n dot product of v-n vector and v-t vector ('most correct direction')
+		'dist' : shortest distance to t among all neighbors n ('closest neighbor') -- min over n of norm(coord(n) - coord(t)), using manhattan norm
+		'dist-manh': synonym for dist
+		'dist-eucl': as with dist-manh, but uses euclidean norm
+		
+		so far all the heuristics seem to perform basically the same (except that manhattan distance is faster)
 	'''
-	def count_vd_paths_to_v3(self,dest_id,dest_coords):
+	def count_vd_paths_to_v3(self,dest_id,dest_coords,heuristic=None):
+		if (heuristic is None) or (heuristic == 'dot'):
+			heuristic = lambda x: - np.dot(self.coords - x.coords, self.coords - dest_coords)#heuristic A: largest dot-product (most in the right direction)
+		elif (heuristic == 'dist') or (heuristic == 'dist-manh'):
+			heuristic = lambda x: manh_norm(x.coords - dest_coords)
+		elif heuristic == 'dist-eucl':
+			heuristic = lambda x:eucl_norm(x.coords - dest_coords)
+
 		self.search_blacklist_flag = True
 		#start a search to dest from each neighbor
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:np.dot(self.coords - x.coords,self.coords - dest_coords),reverse=True))
+		neighbors_to_call = list(sorted(list(self.neighbors),key=heuristic))
 		paths = []
 		for neighbor in neighbors_to_call:
 			self.operations_done += 1
-			path = neighbor.v3_vd_paths_interm(dest_id,dest_coords,self)
+			path = neighbor.v3_vd_paths_interm(dest_id,dest_coords,self,heuristic)
 			if path is not None:
 				paths.append(path)
 				self.pred_tree_clean()#TODO does it make sense to pred clean here/is there somewhere else it should be done?
@@ -296,7 +353,7 @@ class TNNode:
 	'''
 	someone has asked me to find dest
 	'''
-	def v3_vd_paths_interm(self,dest_id,dest_coords,pred):
+	def v3_vd_paths_interm(self,dest_id,dest_coords,pred,heuristic):
 		self.operations_done += 1
 		if self.id == dest_id:#this has to happen before the visited check to implement path shadowing
 			#blacklist nodes on this path
@@ -317,9 +374,9 @@ class TNNode:
 		self.resetted_flag = False
 
 		#otherwise ask the *right* neighbor(s) if they know the muffin man
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:np.dot(self.coords - x.coords,self.coords - dest_coords),reverse=True))
+		neighbors_to_call = list(sorted(list(self.neighbors),key=heuristic))
 		for neighbor in neighbors_to_call:
-			path = neighbor.v3_vd_paths_interm(dest_id,dest_coords,self)
+			path = neighbor.v3_vd_paths_interm(dest_id,dest_coords,self,heuristic)
 			if path is not None:
 				return path
 
