@@ -235,6 +235,11 @@ class TNNode:
 		else:
 			return path_count
 
+	def reset_flags(self):
+		self.resetted_flag = True
+		self.pulse_pred = {}
+		self.search_blacklist_flag = False
+
 	'''
 	do another graph search to reset pulse numbers
 	'''
@@ -244,9 +249,7 @@ class TNNode:
 			return
 
 		#otherwise set our predecessor, reset our number, and tell all our neighbors to reset
-		self.resetted_flag = True
-		self.pulse_pred = {}
-		self.search_blacklist_flag = False
+		self.reset_flags()
 
 		for n in self.neighbors:
 			n.reset_search()
