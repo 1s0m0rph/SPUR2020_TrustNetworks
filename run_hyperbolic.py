@@ -1,10 +1,10 @@
 from Hyperbolic import *
 
 N = 100
-q = 3
+q = 6
 
 np.random.seed(0)
-tng = generate_rand_graph_from_deg_dist(N,q,approx_reciprocity=1)
+tng = generate_rand_graph_from_deg_dist(N,q)
 
 #verify uniqueness of coordinates
 coords_seen = set()
@@ -28,7 +28,7 @@ for s in range(N):
 			npairs += 1#doing this first so we can get progress reports
 
 # s = 0
-# t = 1
+# t = 4
 # npairs = 1
 
 for s in range(N):
@@ -38,7 +38,7 @@ for s in range(N):
 				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
 			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
 
-			paths = tng[s].count_vd_paths_to_hyper(tng[t].coords)
+			paths = tng[s].count_vd_paths_to_hyper(tng[t].addr)
 
 			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
 

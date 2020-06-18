@@ -7,6 +7,35 @@ def hyper_dist(a:complex,b:complex):
 	return np.arccosh(1 + (2*(abs(a-b)**2))/((1 - abs(a)**2)*(1 - abs(b)**2)))
 
 
+'''
+convert a succinct address (in-person sharing) to coordinates by running the generators forward
+'''
+def addr_to_coords(q,addr):
+	dummy = HyperNode(-1,q)
+	dummy.init_as_root()
+	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
+	#pad with zeroes until the length is correct
+	w = int(np.log2(q + 2))#q should be 2 less than a power of 2
+	while len(addr_str) % w != 0:
+		addr_str = '0' + addr_str
+
+	gen_idx = int(addr_str[:w],2) - 1#generator index is funky for the first one so that root has a unique address
+	if gen_idx == -1:
+		return dummy.coords
+	dummy = HyperNode(-1,q,*dummy.d_coords[gen_idx])
+	dummy.calculate_daughter_coords()
+	addr_str = addr_str[w:]
+	while len(addr_str) > 0:
+		gen_idx = int(addr_str[:w],2) - 1
+		if gen_idx == -1:
+			return dummy.coords
+		dummy = HyperNode(-1,q,*dummy.d_coords[gen_idx])
+		dummy.calculate_daughter_coords()
+		addr_str = addr_str[w:]
+
+	return dummy.coords
+
+
 class Isometry:
 
 	def __init__(self,rotation,translation):
@@ -51,7 +80,7 @@ def define_generators(q):
 
 class HyperNode(TNNode):
 
-	def __init__(self,node_id,q,coordinates=None,index=None,isometry=None):
+	def __init__(self,node_id,q,coordinates=None,index=None,isometry=None,addr=None):
 		super().__init__(node_id)
 		self.coords = coordinates
 		self.idx = index
@@ -59,12 +88,16 @@ class HyperNode(TNNode):
 		self.q = q
 
 		self.d_coords = []  # list of available daughter coords (list of [(coords,index,isometry)] which can instantiate daughters)
+		self.addr = addr#address
 		# self.calculate_daughter_coords()
 
 		self.neighbors = set()
 		self.daughters = set()
 
 		self.d_add_search_flag = False
+
+	def __repr__(self):
+		return "HN, {} (@{})".format(self.id,hex(self.addr)[2:])
 
 	'''
 	algorithm 2
@@ -73,6 +106,7 @@ class HyperNode(TNNode):
 		self.coords = 0 + 0j
 		self.idx = 0
 		self.isom = Isometry(1 + 0j,0 + 0j)
+		self.addr = 0
 		self.calculate_daughter_coords()
 
 	'''
@@ -85,8 +119,10 @@ class HyperNode(TNNode):
 			didx = (self.idx + i) % self.q
 			disom = self.isom.cross(generators[didx])
 			dcoord = disom.evaluate(0)
+			w = int(np.log2(self.q+2))
+			daddr = self.addr << w | (i + (1 if self.coords == 0j else 0))
 
-			self.d_coords.append((dcoord,didx,disom))
+			self.d_coords.append((dcoord,didx,disom,daddr))
 
 	def reset_flags(self):
 		super().reset_flags()
@@ -121,7 +157,7 @@ class HyperNode(TNNode):
 			if n.coords is None:
 				raise AttributeError("Tried to connect two nodes that weren't already in the network")
 			# make n our parent
-			self.coords, self.idx, self.isom = n.add_daughter(self)
+			self.coords, self.idx, self.isom, self.addr = n.add_daughter(self)
 			n.reset_search()
 			self.calculate_daughter_coords()
 
@@ -131,7 +167,6 @@ class HyperNode(TNNode):
 	def add_public_key_in_person(self,t_node):
 		self.add_neighbor(t_node)
 
-	#TODO implement greedy routing and check performance
 
 	"""
 	algorithm 4
@@ -142,7 +177,8 @@ class HyperNode(TNNode):
 	'''
 	initialize the search
 	'''
-	def count_vd_paths_to_hyper(self,dest_coords):
+	def count_vd_paths_to_hyper(self,dest_addr):
+		dest_coords = addr_to_coords(self.q,dest_addr)
 		self.search_blacklist_flag = True
 		# start a search to dest from each neighbor
 		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x: hyper_dist(x.coords,dest_coords)))
@@ -161,7 +197,6 @@ class HyperNode(TNNode):
 		return paths
 
 	def gnh_interm(self,dest_coords,pred):
-		self.operations_done += 1
 		if self.coords == dest_coords:  # this has to happen before the visited check to implement path shadowing
 			# blacklist nodes on this path
 			self.pulse_pred.update({-1:pred})
@@ -183,6 +218,7 @@ class HyperNode(TNNode):
 		# otherwise ask the *right* neighbor(s) if they know the muffin man
 		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
 		for neighbor in neighbors_to_call:
+			self.operations_done += 1
 			path = neighbor.gnh_interm(dest_coords,self)
 			if path is not None:
 				return path
@@ -192,7 +228,7 @@ class HyperNode(TNNode):
 
 
 
-def generate_rand_graph_from_deg_dist(num_nodes,q,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3),approx_reciprocity=1.):
+def generate_rand_graph_from_deg_dist(num_nodes,q,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)):
 	#use the social network rand gen algorithm to make a new network
 	G = [HyperNode(i,q) for i in range(num_nodes)]
 	#root is 0
