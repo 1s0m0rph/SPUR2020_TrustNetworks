@@ -11,6 +11,7 @@ def hyper_dist(a:complex,b:complex):
 convert a succinct address (in-person sharing) to coordinates by running the generators forward
 '''
 def addr_to_coords(q,addr):
+	#TODO is there a more succinct way to do this? With 1000 nodes and q=30 we're getting >64bit addresses
 	dummy = HyperNode(-1,q)
 	dummy.init_as_root()
 	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
@@ -176,18 +177,32 @@ class HyperNode(TNNode):
 
 	'''
 	initialize the search
+	
+	npaths variable tells us how many paths to find (we'll stop when we find this many or when we have found the max).
+	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
+		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
-	def count_vd_paths_to_hyper(self,dest_addr):
+	def count_vd_paths_to_hyper_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf')):
 		dest_coords = addr_to_coords(self.q,dest_addr)
+		return self.count_vd_paths_to_hyper(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale)
+
+	'''
+	this should technically be private access
+	'''
+	def count_vd_paths_to_hyper(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf')):
 		self.search_blacklist_flag = True
+		st_dist = hyper_dist(self.coords,dest_coords)
 		# start a search to dest from each neighbor
 		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x: hyper_dist(x.coords,dest_coords)))
 		paths = []
 		for neighbor in neighbors_to_call:
-			self.operations_done += 1
-			path_ret = neighbor.gnh_interm(dest_coords,self)
-			if path_ret is not None:
-				paths.append(path_ret)
+			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
+				self.operations_done += 1
+				path_ret = neighbor.gnh_interm(dest_coords,self,st_dist,max_dist_scale)
+				if path_ret is not None:
+					paths.append(path_ret)
+					if len(paths) >= npaths:
+						break
 
 		for neighbor in self.neighbors:
 			neighbor.reset_search()
@@ -196,7 +211,7 @@ class HyperNode(TNNode):
 
 		return paths
 
-	def gnh_interm(self,dest_coords,pred):
+	def gnh_interm(self,dest_coords,pred,st_dist,max_dist_scale):
 		if self.coords == dest_coords:  # this has to happen before the visited check to implement path shadowing
 			# blacklist nodes on this path
 			self.pulse_pred.update({-1:pred})
@@ -218,10 +233,11 @@ class HyperNode(TNNode):
 		# otherwise ask the *right* neighbor(s) if they know the muffin man
 		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
 		for neighbor in neighbors_to_call:
-			self.operations_done += 1
-			path = neighbor.gnh_interm(dest_coords,self)
-			if path is not None:
-				return path
+			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
+				self.operations_done += 1
+				path_ret = neighbor.gnh_interm(dest_coords,self,st_dist,max_dist_scale)
+				if path_ret is not None:
+					return path_ret
 
 		return None
 
