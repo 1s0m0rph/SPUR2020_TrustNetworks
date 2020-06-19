@@ -6,11 +6,60 @@ arguments are complex numbers
 def hyper_dist(a:complex,b:complex):
 	return np.arccosh(1 + (2*(abs(a-b)**2))/((1 - abs(a)**2)*(1 - abs(b)**2)))
 
+'''
+Compresses a hex string representation of some integer down by indicating repeated digits (mostly useful for human-readability)
+'''
+def str_compress(x:str):
+	current = x[0]
+	count = 1
+	r = x[0]
+	for i in range(1,len(x)):
+		if (current != x[i]) or (i == len(x) - 1):
+			if count > 3:
+				r += '-' + (hex(count)[2:]) + '-' + x[i]
+			else:
+				r += r[-1] * (count - 1) + x[i]
+			#the dashes and intermediate number add 3 chars total, so it only helps (when compared to just repeating the digit) if the count is more than 4 (it's the same if count = 4)
+			current = x[i]
+			count = 1
+		else:
+			count += 1
+
+	return r
+
+'''
+undoes the compression from str_compress (note: outputs a string of hex)
+'''
+def str_decompress(x:str):
+	r = x[0]
+	repeat = 0#how many times should I repeat the next number?
+	get_repetition_number = False
+	rnum = ''
+	for i in range(1,len(x)):
+		if get_repetition_number:
+			if x[i] == '-':
+				#then we've gotten the whole thing
+				repeat = int(rnum,16)-1
+				rnum = ''
+				get_repetition_number = False
+			else:
+				rnum += x[i]
+		elif x[i] == '-':
+			get_repetition_number = True
+		else:
+			r += (r[-1] * repeat) + x[i]
+			repeat = 0
+
+	if rnum != '':
+		repeat = int(rnum,16)-1
+
+	return r + (r[-1] * repeat)
+
 
 '''
 convert a succinct address (in-person sharing) to coordinates by running the generators forward
 '''
-def addr_to_coords(q,addr):
+def addr_to_coords_v0(q,addr):
 	#TODO is there a more succinct way to do this? With 1000 nodes and q=30 we're getting >64bit addresses
 	dummy = HyperNode(-1,q)
 	dummy.init_as_root()
@@ -33,6 +82,35 @@ def addr_to_coords(q,addr):
 		dummy = HyperNode(-1,q,*dummy.d_coords[gen_idx])
 		dummy.calculate_daughter_coords()
 		addr_str = addr_str[w:]
+
+	return dummy.coords
+
+
+'''
+convert a succinct address (in-person sharing) to coordinates by running the generators forward
+
+version 1
+'''
+def addr_to_coords(q,addr,n_levelbits):
+	dummy = HyperNode(-1,q)
+	dummy.init_as_root()
+	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
+	#pad with zeroes until the length is correct
+	w = int(np.log2(q-1))#q should be 1 more than a power of 2
+	while len(addr_str) < np.dtype(addr).itemsize*8:
+		addr_str = '0' + addr_str
+
+	#get the level
+	level = int(addr_str[:n_levelbits],2)
+	addr_str = addr_str[n_levelbits:]
+
+	gen_idx = 0
+	addr_str = (''.join(reversed(addr_str)))[:level*w]#have to go backwards because of how things were added
+	for _ in range(level):
+		gen_idx = int(addr_str[-w:],2)
+		dummy = HyperNode(-1,q,*dummy.d_coords[gen_idx])
+		dummy.calculate_daughter_coords()
+		addr_str = addr_str[:-w]
 
 	return dummy.coords
 
@@ -81,7 +159,10 @@ def define_generators(q):
 
 class HyperNode(TNNode):
 
-	def __init__(self,node_id,q,coordinates=None,index=None,isometry=None,addr=None):
+	ADDRESS_DTYPE = np.int64
+	ADDRESS_LEVEL_BITS = 8#how many bits in the address are devoted to the level in the tree?
+
+	def __init__(self,node_id,q,coordinates=None,index=None,isometry=None,saddr=None):
 		super().__init__(node_id)
 		self.coords = coordinates
 		self.idx = index
@@ -89,7 +170,8 @@ class HyperNode(TNNode):
 		self.q = q
 
 		self.d_coords = []  # list of available daughter coords (list of [(coords,index,isometry)] which can instantiate daughters)
-		self.addr = addr#address
+		self.saddr = saddr#address (k bits of level, width-k bits of address)
+		#only store the succinct address since the coordinates are a better exact address anyway
 		# self.calculate_daughter_coords()
 
 		self.neighbors = set()
@@ -98,7 +180,25 @@ class HyperNode(TNNode):
 		self.d_add_search_flag = False
 
 	def __repr__(self):
-		return "HN, {} (@{})".format(self.id,hex(self.addr)[2:])
+		return "HN, {} (@{})".format(self.id,self.saddr)
+
+
+	'''
+	convert an int address to a succinct address
+	'''
+	def int_addr_to_succ(self,iaddr):
+		n_nybble = np.dtype(self.ADDRESS_DTYPE).itemsize * 2
+		uncompressed = hex(iaddr)[2:]
+		while len(uncompressed) < n_nybble:
+			uncompressed = '0' + uncompressed
+		return str_compress(uncompressed)
+
+	'''
+	convert a succinct address to an int address
+	'''
+	def succ_addr_to_int(self,saddr):
+		return self.ADDRESS_DTYPE(int(str_decompress(saddr),16))
+
 
 	'''
 	algorithm 2
@@ -107,7 +207,7 @@ class HyperNode(TNNode):
 		self.coords = 0 + 0j
 		self.idx = 0
 		self.isom = Isometry(1 + 0j,0 + 0j)
-		self.addr = 0
+		self.saddr = '0'#reserved root address
 		self.calculate_daughter_coords()
 
 	'''
@@ -116,12 +216,25 @@ class HyperNode(TNNode):
 	def calculate_daughter_coords(self):
 		generators = define_generators(self.q)
 
-		for i in range(0 if self.coords == 0j else 1,self.q):
+		paddr = self.succ_addr_to_int(self.saddr)
+
+		w = self.ADDRESS_DTYPE(int(np.log2(self.q - 1)))
+		level_mask = (self.ADDRESS_DTYPE(1) << (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - 1)) >> self.ADDRESS_LEVEL_BITS - 1
+		d_level = (((paddr & level_mask) >> (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - self.ADDRESS_LEVEL_BITS)) + 1)
+		bound_check_mask = ~((self.ADDRESS_DTYPE(1) << (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - 1)) >> (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - self.ADDRESS_LEVEL_BITS))
+		if d_level >= bound_check_mask:
+			raise OverflowError('{} level bits insufficient to properly index tree'.format(self.ADDRESS_LEVEL_BITS))
+		d_level <<= (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - self.ADDRESS_LEVEL_BITS)
+
+
+
+		for i in range(1,self.q):#ignore the zeroth daughter of the root to enforce regularity of addressing
 			didx = (self.idx + i) % self.q
 			disom = self.isom.cross(generators[didx])
 			dcoord = disom.evaluate(0)
-			w = int(np.log2(self.q+2))
-			daddr = self.addr << w | (i + (1 if self.coords == 0j else 0))
+			daddr = ((paddr if self.coords != 0j else self.ADDRESS_DTYPE(0)) & ~level_mask) << w | self.ADDRESS_DTYPE(i - 1)
+			daddr |= d_level
+			daddr = self.int_addr_to_succ(daddr)
 
 			self.d_coords.append((dcoord,didx,disom,daddr))
 
@@ -158,7 +271,7 @@ class HyperNode(TNNode):
 			if n.coords is None:
 				raise AttributeError("Tried to connect two nodes that weren't already in the network")
 			# make n our parent
-			self.coords, self.idx, self.isom, self.addr = n.add_daughter(self)
+			self.coords, self.idx, self.isom, self.saddr = n.add_daughter(self)
 			n.reset_search()
 			self.calculate_daughter_coords()
 
@@ -183,7 +296,7 @@ class HyperNode(TNNode):
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
 	def count_vd_paths_to_hyper_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf')):
-		dest_coords = addr_to_coords(self.q,dest_addr)
+		dest_coords = addr_to_coords(self.q,self.succ_addr_to_int(dest_addr),self.ADDRESS_LEVEL_BITS)
 		return self.count_vd_paths_to_hyper(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale)
 
 	'''

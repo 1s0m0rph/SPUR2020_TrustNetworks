@@ -1,7 +1,7 @@
 from Hyperbolic import *
 
 N = 100
-q = int((2**5) - 2)
+q = int((2**1) + 1)
 
 np.random.seed(0)
 tng = generate_rand_graph_from_deg_dist(N,q)
@@ -12,11 +12,22 @@ addrs_seen = set()
 for node in tng:
 	if node.coords in coords_seen:
 		print('COORDINATE DUPLICATED: {}, {}'.format(node.coords,node))
-	elif node.addr in addrs_seen:
-		print('ADDRESS DUPLICATED: {}, {}'.format(node.addr,node))
+	elif node.saddr in addrs_seen:
+		print('ADDRESS DUPLICATED: {}, {}'.format(node.saddr,node))
 	else:
 		coords_seen.add(node.coords)
-		addrs_seen.add(node.addr)
+		addrs_seen.add(node.saddr)
+
+# #test succinct functions
+# for node in tng:
+# 	res = addr_to_coords(q,node.succ_addr_to_int(node.saddr),node.ADDRESS_LEVEL_BITS)
+# 	if not np.isclose(res,node.coords):
+# 		print('SUCCINCT ADDRESS FAILURE: {}, {}, {}'.format(node.coords,res,node.saddr))
+#
+# for node in tng:
+# 	print(node)
+#
+# exit(0)
 
 paths_found_sum = 0
 paths_exact_sum = 0
@@ -41,7 +52,7 @@ for s in range(N):
 				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
 			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
 
-			# paths = tng[s].count_vd_paths_to_hyper_from_addr(tng[t].addr,npaths=3)#should technically be using this call, but it's slow when we're doing so many
+			# paths = tng[s].count_vd_paths_to_hyper_from_addr(tng[t].saddr,max_dist_scale=1.5)#should technically be using this call, but it's slow when we're doing so many
 			paths = tng[s].count_vd_paths_to_hyper(tng[t].coords,max_dist_scale=1.5)
 
 			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
