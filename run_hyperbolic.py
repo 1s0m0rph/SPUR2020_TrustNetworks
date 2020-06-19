@@ -20,7 +20,7 @@ for node in tng:
 
 # #test succinct functions
 # for node in tng:
-# 	res = addr_to_coords(q,node.succ_addr_to_int(node.saddr),node.ADDRESS_LEVEL_BITS)
+# 	res = addr_to_coords(q,node.saddr,node.ADDRESS_LEVEL_BITS)
 # 	if not np.isclose(res,node.coords):
 # 		print('SUCCINCT ADDRESS FAILURE: {}, {}, {}'.format(node.coords,res,node.saddr))
 #

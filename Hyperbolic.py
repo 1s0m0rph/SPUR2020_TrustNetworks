@@ -93,7 +93,9 @@ version 1
 '''
 def addr_to_coords(q,addr,n_levelbits):
 	dummy = HyperNode(-1,q)
+	dummy.ADDRESS_LEVEL_BITS = n_levelbits
 	dummy.init_as_root()
+	addr = dummy.succ_addr_to_int(addr)
 	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
 	#pad with zeroes until the length is correct
 	w = int(np.log2(q-1))#q should be 1 more than a power of 2
@@ -296,7 +298,7 @@ class HyperNode(TNNode):
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
 	def count_vd_paths_to_hyper_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf')):
-		dest_coords = addr_to_coords(self.q,self.succ_addr_to_int(dest_addr),self.ADDRESS_LEVEL_BITS)
+		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
 		return self.count_vd_paths_to_hyper(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale)
 
 	'''
