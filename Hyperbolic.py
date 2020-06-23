@@ -382,26 +382,20 @@ class HyperNode(TNNode):
 	this should technically be private access
 	'''
 	def count_vd_paths_to_hyper_multibl(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf')):
-		self.search_blacklist_flag = True
 		st_dist = hyper_dist(self.coords,dest_coords)
-		#start a search to dest from each neighbor
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
+		#start a search to dest from ourselves
 		candidate_paths = []
 		pulse_num = 0
-		for neighbor in neighbors_to_call:
-			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
-				self.operations_done += 1
-				path_ret = neighbor.gnh_multibl_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
-				if path_ret is not None:
-					candidate_paths.append(path_ret)
-					if len(candidate_paths) >= npaths:
-						break
-					pulse_num += 1
+		self.operations_done += 1
+		path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
+		while path_ret is not None:
+			candidate_paths.append(path_ret)
+			path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
+			self.operations_done +=  1
+			pulse_num +=  1
 
 		for neighbor in self.neighbors:
 			neighbor.reset_search()
-
-		self.search_blacklist_flag = False
 
 		#now pick the maximum simultaneous paths from the candidates
 
@@ -465,9 +459,6 @@ class HyperNode(TNNode):
 		if pulse_num in self.pulse_pred:
 			return None#we've already been visited in this search
 
-		if self.search_blacklist_flag:
-			return None#this only applies to s
-
 		if pulse_num in self.pulse_blacklisted:
 			return None#we are already blacklisted (or have been visited in this search), so don't go this way
 
@@ -495,11 +486,11 @@ class HyperNode(TNNode):
 	this method also reconstructs the path
 	'''
 	def multi_blacklist_zip(self,pulse_num,path: list):
-		if pulse_num not in self.pulse_pred:
-			return path #this could also return the reconstructed path, but would require more data to be passed between nondes
+		if (pulse_num not in self.pulse_pred) or (self.pulse_pred[pulse_num] is None):
+			return path #drop the first one (s)
 
 		self.pulse_blacklisted.add(pulse_num)
-		return self.pulse_pred[pulse_num].v2_vd_blacklist_zip(pulse_num,[self] + path)
+		return self.pulse_pred[pulse_num].multi_blacklist_zip(pulse_num,[self] + path)
 
 
 
