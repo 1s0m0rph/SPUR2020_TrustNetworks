@@ -152,8 +152,8 @@ def define_generators(q):
 	trans_isom = Isometry(1,np.tanh(np.arccosh(1 / (np.sin(np.pi / q))))).cross(Isometry(-1,0))
 
 	for i in range(q):
-		# for some reason doing it the way their pseudocode says to doesn't work because of this R^i thing
-		# it only affects the zeroth generator (and therefore only the root)
+		#for some reason doing it the way their pseudocode says to doesn't work because of this R^i thing
+		#it only affects the zeroth generator (and therefore only the root)
 		rot_isom_i = Isometry((np.array([rot_isom.rot,rot_isom.trans]) ** complex(i))[0],0j)
 		generators.append(rot_isom_i.cross(trans_isom).cross(rot_isom_i.inv()))
 
@@ -171,15 +171,18 @@ class HyperNode(TNNode):
 		self.isom = isometry
 		self.q = q
 
-		self.d_coords = []  # list of available daughter coords (list of [(coords,index,isometry)] which can instantiate daughters)
+		self.d_coords = []#list of available daughter coords (list of [(coords,index,isometry)] which can instantiate daughters)
 		self.saddr = saddr#address (k bits of level, width-k bits of address)
 		#only store the succinct address since the coordinates are a better exact address anyway
-		# self.calculate_daughter_coords()
+		#self.calculate_daughter_coords()
 
 		self.neighbors = set()
 		self.daughters = set()
 
 		self.d_add_search_flag = False
+
+		self.pulse_blacklisted = set()#which pulses am I blacklisted for?
+		self.max_neighbor_called = -1
 
 	def __repr__(self):
 		return "HN, {} (@{})".format(self.id,self.saddr)
@@ -243,6 +246,8 @@ class HyperNode(TNNode):
 	def reset_flags(self):
 		super().reset_flags()
 		self.d_add_search_flag = False
+		self.pulse_blacklisted = set()
+		self.max_neighbor_called = -1
 
 	'''
 	add this node as a daughter and give it the info it needs (coords, index, isometry)
@@ -256,7 +261,7 @@ class HyperNode(TNNode):
 			self.daughters.add(d)
 			return self.d_coords.pop(0)
 		else:
-			# ask our neighbors if they can add d
+			#ask our neighbors if they can add d
 			for neighbor in self.neighbors:
 				info = neighbor.add_daughter(d)
 				if info is not None:
@@ -268,11 +273,11 @@ class HyperNode(TNNode):
 	'''
 	def add_neighbor(self,n):
 		if n in self.neighbors:
-			return  # already exists
+			return#already exists
 		if self.coords is None:
 			if n.coords is None:
 				raise AttributeError("Tried to connect two nodes that weren't already in the network")
-			# make n our parent
+			#make n our parent
 			self.coords, self.idx, self.isom, self.saddr = n.add_daughter(self)
 			n.reset_search()
 			self.calculate_daughter_coords()
@@ -307,7 +312,7 @@ class HyperNode(TNNode):
 	def count_vd_paths_to_hyper(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf')):
 		self.search_blacklist_flag = True
 		st_dist = hyper_dist(self.coords,dest_coords)
-		# start a search to dest from each neighbor
+		#start a search to dest from each neighbor
 		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x: hyper_dist(x.coords,dest_coords)))
 		paths = []
 		for neighbor in neighbors_to_call:
@@ -327,25 +332,25 @@ class HyperNode(TNNode):
 		return paths
 
 	def gnh_interm(self,dest_coords,pred,st_dist,max_dist_scale):
-		if self.coords == dest_coords:  # this has to happen before the visited check to implement path shadowing
-			# blacklist nodes on this path
+		if self.coords == dest_coords:#this has to happen before the visited check to implement path shadowing
+			#blacklist nodes on this path
 			self.pulse_pred.update({-1:pred})
 			self.resetted_flag = False
-			self.search_blacklist_flag = False  # t is never blacklisted, but the function after sets it to be so
+			self.search_blacklist_flag = False#t is never blacklisted, but the function after sets it to be so
 			path = self.v2_vd_blacklist_zip(-1,[])
 			return path
 
 		if -1 in self.pulse_pred:
-			return None  # we've already been visited in this search
+			return None#we've already been visited in this search
 
 		if self.search_blacklist_flag:
-			return None  # we are already blacklisted (or have been visited in this search), so don't go this way
+			return None#we are already blacklisted (or have been visited in this search), so don't go this way
 
-		# we've relayed this pulse now
+		#we've relayed this pulse now
 		self.pulse_pred.update({-1:pred})
 		self.resetted_flag = False
 
-		# otherwise ask the *right* neighbor(s) if they know the muffin man
+		#otherwise ask the *right* neighbor(s) if they know the muffin man
 		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
 		for neighbor in neighbors_to_call:
 			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
@@ -355,6 +360,146 @@ class HyperNode(TNNode):
 					return path_ret
 
 		return None
+	
+	
+	"""
+	partial/multiple blacklisting
+	"""
+
+	'''
+	initialize the search
+
+	npaths variable tells us how many paths to find (we'll stop when we find this many or when we have found the max).
+	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
+		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
+	'''
+	def count_vd_paths_to_hyper_multibl_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf')):
+		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
+		return self.count_vd_paths_to_hyper_multibl(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale)
+
+
+	'''
+	this should technically be private access
+	'''
+	def count_vd_paths_to_hyper_multibl(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf')):
+		self.search_blacklist_flag = True
+		st_dist = hyper_dist(self.coords,dest_coords)
+		#start a search to dest from each neighbor
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
+		candidate_paths = []
+		pulse_num = 0
+		for neighbor in neighbors_to_call:
+			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
+				self.operations_done += 1
+				path_ret = neighbor.gnh_multibl_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
+				if path_ret is not None:
+					candidate_paths.append(path_ret)
+					if len(candidate_paths) >= npaths:
+						break
+					pulse_num += 1
+
+		for neighbor in self.neighbors:
+			neighbor.reset_search()
+
+		self.search_blacklist_flag = False
+
+		#now pick the maximum simultaneous paths from the candidates
+
+		compat_table = [[True for _ in range(len(candidate_paths))] for _ in range(len(candidate_paths))]#which paths are compatible with which others?
+		#build the compatibility table
+		for i,ipath in enumerate(candidate_paths):
+			for j,jpath in enumerate(candidate_paths):
+				#check these paths for compatibility
+				seen_nodes_i = set()
+				seen_nodes_j = set()
+				for k in range(min(len(ipath)-1,len(jpath)-1)):#don't count the last one no matter what (it's t)
+					if (ipath[k] == jpath[k]) or (ipath[k] in seen_nodes_j) or (jpath[k] in seen_nodes_i):
+						compat_table[i][j] = False
+						break
+					else:
+						seen_nodes_i.add(ipath[k])
+						seen_nodes_j.add(jpath[k])
+
+				#verify the longer one against the existing set
+				lpath = ipath if len(ipath) > len(jpath) else jpath
+				for k in range(min(len(ipath)-1,len(jpath)-1),len(lpath)-1):
+					if (lpath[k] in seen_nodes_i) or (lpath[k] in seen_nodes_j):#either we have an invalid path or these are just incompatible
+						compat_table[i][j] = False
+						break
+
+		#evaluate the compatibility table
+		#unfortunately this is NP-hard via reduction to clique (we're finding a clique in the graph defined by this as its adjacency matrix)
+		path_idxs = list(range(len(candidate_paths)))
+		current_use_set = set_increment(path_idxs,set())#which paths (indexes) are we currently using?
+		max_use_set = set()#which paths (indexes) form the best set so far?
+		while len(current_use_set) > 0:
+			if len(current_use_set) > len(max_use_set):#speedup: don't bother if it wouldn't be better anyway
+				#check if this set is mutually compatible
+				is_mutual = True
+				for i in current_use_set:
+					for j in current_use_set:
+						if j < i:
+							if not compat_table[i][j]:
+								is_mutual = False#there is some pair that doesn't work
+								break
+					if not is_mutual:
+						break
+
+				if is_mutual:
+					max_use_set = current_use_set.copy()
+			current_use_set = set_increment(path_idxs,current_use_set)
+
+
+		return [candidate_paths[i] for i in max_use_set]
+
+
+	def gnh_multibl_interm(self,dest_coords,pred,pulse_num,st_dist,max_dist_scale):
+		if self.coords == dest_coords:#this has to happen before the visited check to implement path shadowing
+			#blacklist nodes on this path
+			self.pulse_pred.update({pulse_num:pred})
+			self.resetted_flag = False
+			self.search_blacklist_flag = False#t is never blacklisted, but the function after sets it to be so
+			path = self.multi_blacklist_zip(pulse_num,[])
+			return path
+
+		if pulse_num in self.pulse_pred:
+			return None#we've already been visited in this search
+
+		if self.search_blacklist_flag:
+			return None#this only applies to s
+
+		if pulse_num in self.pulse_blacklisted:
+			return None#we are already blacklisted (or have been visited in this search), so don't go this way
+
+		#we've relayed this pulse now
+		self.pulse_pred.update({pulse_num:pred})
+		self.resetted_flag = False
+
+		#otherwise ask the *right* neighbor(s) if they know the muffin man
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
+		start_idx = 0 if (len(self.pulse_blacklisted) == 0) else (self.max_neighbor_called + 1)
+		for nidx in range(start_idx,len(neighbors_to_call)):
+			neighbor = neighbors_to_call[nidx]
+			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
+				self.operations_done += 1
+				path_ret = neighbor.gnh_multibl_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
+				self.max_neighbor_called = nidx
+				if path_ret is not None:
+					return path_ret
+
+		return None
+
+	'''
+	I am on the path to dest from s, so I need to be blacklisted
+
+	this method also reconstructs the path
+	'''
+	def multi_blacklist_zip(self,pulse_num,path: list):
+		if pulse_num not in self.pulse_pred:
+			return path #this could also return the reconstructed path, but would require more data to be passed between nondes
+
+		self.pulse_blacklisted.add(pulse_num)
+		return self.pulse_pred[pulse_num].v2_vd_blacklist_zip(pulse_num,[self] + path)
 
 
 

@@ -2,10 +2,7 @@
 General utils etc for TN/Trust Networks
 """
 
-import numpy as np
-import networkx as nx
-import rsa
-import scipy.stats
+from util import *
 
 def manh_norm(v):
 	return sum(map(lambda x: abs(x),v))

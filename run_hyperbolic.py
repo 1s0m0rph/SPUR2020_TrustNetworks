@@ -47,13 +47,13 @@ for s in range(N):
 
 for s in range(N):
 	for t in range(s+1,N):
-		if t not in tng[s].neighbors:
+		if tng[t] not in tng[s].neighbors:
 			if pair_count % 100 == 0:
 				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
 			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
 
-			# paths = tng[s].count_vd_paths_to_hyper_from_addr(tng[t].saddr,max_dist_scale=1.5)#should technically be using this call, but it's slow when we're doing so many
-			paths = tng[s].count_vd_paths_to_hyper(tng[t].coords,max_dist_scale=1.5)
+			# paths = tng[s].count_vd_paths_to_hyper_multibl_from_addr(tng[t].saddr)#should technically be using this call, but it's slow when we're doing so many
+			paths = tng[s].count_vd_paths_to_hyper_multibl(tng[t].coords)
 
 			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
 

@@ -32,6 +32,15 @@ central questions:
 				if we blockchain c's ledger, we might have an easier time with anonymous transfers since all that needs to be done for a new transferee to verify c's integrity is to verify that blockchain with b
 				
 				basically the problem with even this idea is that c can always delete the last item in their ledger (not anything in the middle because of blockchain stuff) and no one would really know any better. This probably gets into the idea of "proof of *" where here * could be trust or something
+				
+			Any time we go with the option of c (or anyone else) keeping track of things with a ledger, the system necessarily loses some degree of anonymity (not to mention that it makes things more complicated -- think of the difference in ease of transfer between these currencies and physical US dollars). What if we didn't bother to secure this -- that is, we allow double spending?
+			
+				Obviously, we can't allow anything more than *double*, but if we assume it's possible to detect double spending on the part of a, then we can levy serious consequences for a. The obvious option is to kick a off the network and levy consequences for anyone associated with a (either by neighbor-linking or by devaluing a's currency). Another option is to devalue *c*'s currency in such a way that the double-spend doesn't get a anything useful. In the trust metaphor, c's currency becomes less trusted because it was used by someone to double-spend. This would motivate any such c to cut all ties with a in an attempt to cut their losses.
+				
+				how do we detect double-spends?
+					
+					one (expensive) option is to just ping the network whenever a unit of c's currency is going to be spent. If no one disputes the spending of those units, the transaction may continue, if they are disputed [someone else also owns those units], the transaction is flagged as a double spend. The problem with this is that we don't know who did the duplication: the disputer or the spender. I don't think there's any way to detect who involved did the duplication without de-anonymizing the network, so as long as that's a priority the only viable method that seems to exist here is devaluing c's currency.
+					
 			
 	how is new currency created?
 		
