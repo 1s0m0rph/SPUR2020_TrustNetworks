@@ -7,25 +7,41 @@ def hyper_dist(a:complex,b:complex):
 	return np.arccosh(1 + (2*(abs(a-b)**2))/((1 - abs(a)**2)*(1 - abs(b)**2)))
 
 '''
-Compresses a hex string representation of some integer down by indicating repeated digits (mostly useful for human-readability)
+modified to work with hyperbolic-embed graphs
 '''
-def str_compress(x:str):
-	current = x[0]
-	count = 1
-	r = x[0]
-	for i in range(1,len(x)):
-		if (current != x[i]) or (i == len(x) - 1):
-			if count > 3:
-				r += '-' + (hex(count)[2:]) + '-' + x[i]
-			else:
-				r += r[-1] * (count - 1) + x[i]
-			#the dashes and intermediate number add 3 chars total, so it only helps (when compared to just repeating the digit) if the count is more than 4 (it's the same if count = 4)
-			current = x[i]
-			count = 1
-		else:
-			count += 1
+def generate_rand_graph_from_deg_dist_hyper(num_nodes,q,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)):
+	#use the social network rand gen algorithm to make a new network
+	G = [HyperNode(i,q) for i in range(num_nodes)]
+	#root is 0
+	G[0].init_as_root()
 
-	return r
+	#assign a degree to each node
+	degrees = [max(1,int(dist())) for i in range(num_nodes)]#make sure everything is connected to at least one
+	connections_left_to_make = {i for i in range(num_nodes)}#these nodes all have connections left to make
+	total_connections_to_make = sum(degrees)
+	nodes_in_network = {0}#only the root is in the network to start with
+
+	#randomly connect the nodes according to their degrees
+	connections_made = 0
+	while (connections_made < total_connections_to_make) and (len(connections_left_to_make) > 1):
+		#pick a random starter node (among the nodes in the network already
+		i = np.random.choice(list(connections_left_to_make.intersection(nodes_in_network)))
+		#pick a random other node to assign to
+		assign_to_idx = np.random.choice(list(connections_left_to_make - {i} - G[i].neighbors))#no self-edges, no multiedges
+		assign_to = G[assign_to_idx]
+		nodes_in_network.add(assign_to_idx)#this is why we use a set for nodes in network
+		G[i].add_public_key_in_person(assign_to)
+		connections_made += 2
+		degrees[i] -= 1
+		if degrees[i] == 0:
+			connections_left_to_make.remove(i)
+		degrees[assign_to_idx] -= 1
+		if degrees[assign_to_idx] == 0:
+			connections_left_to_make.remove(assign_to_idx)
+
+		#reciprocity is guaranteed by the add_neighbor method
+
+	return G
 
 '''
 undoes the compression from str_compress (note: outputs a string of hex)
@@ -363,7 +379,7 @@ class HyperNode(TNNode):
 	
 	
 	"""
-	partial/multiple blacklisting
+	partial/multiple blacklisting (doesn't seem to really work at all)
 	"""
 
 	'''
@@ -388,6 +404,7 @@ class HyperNode(TNNode):
 		pulse_num = 0
 		self.operations_done += 1
 		path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
+		pulse_num = 1#don't send the 0-pulse twice
 		while path_ret is not None:
 			candidate_paths.append(path_ret)
 			path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
@@ -452,7 +469,6 @@ class HyperNode(TNNode):
 			#blacklist nodes on this path
 			self.pulse_pred.update({pulse_num:pred})
 			self.resetted_flag = False
-			self.search_blacklist_flag = False#t is never blacklisted, but the function after sets it to be so
 			path = self.multi_blacklist_zip(pulse_num,[])
 			return path
 
@@ -467,7 +483,7 @@ class HyperNode(TNNode):
 		self.resetted_flag = False
 
 		#otherwise ask the *right* neighbor(s) if they know the muffin man
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:(len(x.pulse_blacklisted),hyper_dist(x.coords,dest_coords))))#prioritize unblacklisted neighbors
 		start_idx = 0 if (len(self.pulse_blacklisted) == 0) else (self.max_neighbor_called + 1)
 		for nidx in range(start_idx,len(neighbors_to_call)):
 			neighbor = neighbors_to_call[nidx]
@@ -493,38 +509,70 @@ class HyperNode(TNNode):
 		return self.pulse_pred[pulse_num].multi_blacklist_zip(pulse_num,[self] + path)
 
 
+"""
+CENTRALIZED STUFF
+"""
 
 
-def generate_rand_graph_from_deg_dist(num_nodes,q,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)):
-	#use the social network rand gen algorithm to make a new network
-	G = [HyperNode(i,q) for i in range(num_nodes)]
-	#root is 0
-	G[0].init_as_root()
+'''
+use max flow on a subgraph of HG with all vertices at distance less than max_dist_scale * dist(s,t)
 
-	#assign a degree to each node
-	degrees = [max(1,int(dist())) for i in range(num_nodes)]#make sure everything is connected to at least one
-	connections_left_to_make = {i for i in range(num_nodes)}#these nodes all have connections left to make
-	total_connections_to_make = sum(degrees)
-	nodes_in_network = {0}#only the root is in the network to start with
+dist_measure ('path' or 't'): measure as closest distance to any vertex on the shortest path ('path') or as closest to t ('t')
 
-	#randomly connect the nodes according to their degrees
-	connections_made = 0
-	while (connections_made < total_connections_to_make) and (len(connections_left_to_make) > 1):
-		#pick a random starter node (among the nodes in the network already
-		i = np.random.choice(list(connections_left_to_make.intersection(nodes_in_network)))
-		#pick a random other node to assign to
-		assign_to_idx = np.random.choice(list(connections_left_to_make - {i} - G[i].neighbors))#no self-edges, no multiedges
-		assign_to = G[assign_to_idx]
-		nodes_in_network.add(assign_to_idx)#this is why we use a set for nodes in network
-		G[i].add_public_key_in_person(assign_to)
-		connections_made += 2
-		degrees[i] -= 1
-		if degrees[i] == 0:
-			connections_left_to_make.remove(i)
-		degrees[assign_to_idx] -= 1
-		if degrees[assign_to_idx] == 0:
-			connections_left_to_make.remove(assign_to_idx)
+This could be done decentralized according to the processes laid out in A. Segall's 1979 paper "decentralized maximum flow algorithms"
 
-		#reciprocity is guaranteed by the add_neighbor method
+returns both the number of paths and the nodes used (assumed to be the entire subgraph)
+'''
+def hyper_VD_paths_local(HG:list,s:int,t:int,max_dist_scale=float('inf'),dist_measure='path',autoscale_increment=None):
+	#first reduce HG down
+	HGp = []
+	nodes_removed = set()
+	st_dist = hyper_dist(HG[s].coords,HG[t].coords)
+	short_path = None
+	if dist_measure == 'path':
+		#find a shortest path from s to t
+		short_path = HG[s].count_vd_paths_to_hyper(HG[t].coords,npaths=1)[0]
+	elif dist_measure == 't':
+		short_path = [HG[t]]
+	else:
+		raise AttributeError('Unknown distance metric: {}'.format(dist_measure))
 
-	return G
+	for node in HG:
+		if min([hyper_dist(node.coords,x.coords) for x in short_path]) <= max_dist_scale * st_dist:
+			nodecpy = HyperNode(node.id,node.q,node.coords,node.idx,node.isom)
+			nodecpy.neighbors = node.neighbors.copy()
+			HGp.append(nodecpy)
+		else:
+			nodes_removed.add(node)
+
+	#remove unnecessary edges
+	for node in HGp:
+		node.neighbors = node.neighbors - nodes_removed
+
+
+	HGp_nx = convert_to_nx_graph(HGp)
+	HGp_nx_transform = vertex_disjoint_transform(HGp_nx)
+
+	if 'f{}'.format(s) in HGp_nx_transform.nodes:
+		s_run = 'f{}'.format(s)
+	else:
+		s_run = s
+
+
+	if autoscale_increment is not None:
+		#keep increasing the max dist scale until the graph is connected
+		ret = 0
+		try:
+			ret = nx.algorithms.flow.edmonds_karp(HGp_nx_transform,s_run,t).graph['flow_value'],len(HGp)
+		except nx.NetworkXError:
+			ret = hyper_VD_paths_local(HG,s,t,max_dist_scale=max_dist_scale+autoscale_increment,dist_measure=dist_measure,autoscale_increment=autoscale_increment)
+
+		return ret
+	else:
+		ret = 0
+		try:
+			ret = nx.algorithms.flow.edmonds_karp(HGp_nx_transform,s_run,t).graph['flow_value'],len(HGp)
+		except nx.NetworkXError:
+			raise AttributeError('max dist scale of {} too small for s,t pair (s and t are cut) and autoscale is disabled.'.format(max_dist_scale))
+
+		return ret

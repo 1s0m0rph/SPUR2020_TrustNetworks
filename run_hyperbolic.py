@@ -4,7 +4,7 @@ N = 100
 q = int((2**1) + 1)
 
 np.random.seed(0)
-tng = generate_rand_graph_from_deg_dist(N,q)
+tng = generate_rand_graph_from_deg_dist_hyper(N,q)
 
 #verify uniqueness of coordinates and addresses
 coords_seen = set()
