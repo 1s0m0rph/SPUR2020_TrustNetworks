@@ -53,7 +53,7 @@ for s in range(N):
 			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
 
 			# paths = tng[s].count_vd_paths_to_hyper_multibl_from_addr(tng[t].saddr)#should technically be using this call, but it's slow when we're doing so many
-			paths = tng[s].count_vd_paths_to_hyper_multibl(tng[t].coords)
+			paths = tng[s].count_vd_paths_to_hyper(tng[t].coords,stop_on_first_failure=True)
 
 			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
 

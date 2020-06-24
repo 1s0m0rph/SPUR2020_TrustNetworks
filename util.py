@@ -1,5 +1,6 @@
 import numpy as np
 import networkx as nx
+import re
 import rsa
 import scipy.stats
 
@@ -56,14 +57,57 @@ def vertex_disjoint_transform(G):
 use max flow on a modified version of G to find the number of vertex disjoint paths between s and t
 '''
 def vertex_disjoint_paths(G,s,t):
+	#TODO: figure out how many nodes are in the paths this algorithm would give and compare with current blacklisting etc algorithms
 	#first modify G so that two-in two-out motifs evaluate correctly
 	Gp = vertex_disjoint_transform(G)
 	#then run max flow on that graph with the caveat that if we used the fork node transform on s we need to change the start to s
 	if 'f{}'.format(s) in Gp.nodes:
 		s = 'f{}'.format(s)
 
-	return nx.algorithms.flow.edmonds_karp(Gp,s,t).graph['flow_value']
+	R = nx.algorithms.flow.edmonds_karp(Gp,s,t)
+	return R.graph['flow_value']
 
+
+'''
+Given a residual network output of some nx flow algorithm, give me a list of <min vertex cut> VD paths 
+'''
+def retrace_max_flow_paths(R:nx.DiGraph,s,t):
+	paths = []
+	exp_q = [s]#exploration queue
+	current = None
+	seen = set()
+	pred = {s:None}#map nodes to predecessors (this should be able to change)
+
+	#TODO finish this
+
+	while len(exp_q) > 0:
+		#run a DFS along some path to t, once we reach t, add that path to paths
+		current = exp_q.pop(-1)
+		if current == t:
+			#add the path to paths
+			paths.append(retrace_single_path(pred,t))
+			#keep moving
+
+		#add on all neighbors *with flow == 1*
+		for neigh in R.neighbors(current):
+			if (neigh not in seen) and (R[current][neigh]['flow'] > 0):
+				exp_q.append(neigh)
+				seen.add(neigh)
+'''
+traverse the predecessor map to figure out a single path
+'''
+def retrace_single_path(pred,current,path=None):
+	if path is None:
+		path = []
+	if pred[current] is None:
+		return path
+
+	fork_match = re.match(r'f([0-9]+)',str(current))
+	if fork_match is not None:#don't add fork-nodes to the path
+		assert(pred[current] == int(fork_match.group(1)))
+		return retrace_single_path(pred,pred[current],path)
+	else:
+		return retrace_single_path(pred,pred[current],[current] + path)
 
 '''
 Compresses a hex string representation of some integer down by indicating repeated digits (mostly useful for human-readability)

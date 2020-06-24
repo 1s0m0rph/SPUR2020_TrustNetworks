@@ -318,14 +318,14 @@ class HyperNode(TNNode):
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
-	def count_vd_paths_to_hyper_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf')):
+	def count_vd_paths_to_hyper_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
 		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale)
+		return self.count_vd_paths_to_hyper(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
 
 	'''
 	this should technically be private access
 	'''
-	def count_vd_paths_to_hyper(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf')):
+	def count_vd_paths_to_hyper(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
 		self.search_blacklist_flag = True
 		st_dist = hyper_dist(self.coords,dest_coords)
 		#start a search to dest from each neighbor
@@ -339,6 +339,8 @@ class HyperNode(TNNode):
 					paths.append(path_ret)
 					if len(paths) >= npaths:
 						break
+				elif stop_on_first_failure:
+					break
 
 		for neighbor in self.neighbors:
 			neighbor.reset_search()
@@ -439,7 +441,6 @@ class HyperNode(TNNode):
 						break
 
 		#evaluate the compatibility table
-		#unfortunately this is NP-hard via reduction to clique (we're finding a clique in the graph defined by this as its adjacency matrix)
 		path_idxs = list(range(len(candidate_paths)))
 		current_use_set = set_increment(path_idxs,set())#which paths (indexes) are we currently using?
 		max_use_set = set()#which paths (indexes) form the best set so far?

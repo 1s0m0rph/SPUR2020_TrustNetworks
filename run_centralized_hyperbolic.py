@@ -5,8 +5,8 @@ q = int((2**1) + 1)
 
 np.random.seed(0)
 tng = generate_rand_graph_from_deg_dist_hyper(N,q)
-max_dist_scale = 1.5
-dist_measure = 't'
+max_dist_scale = 1
+dist_measure = 'path'
 autoscale_increment = 0.1
 
 #verify uniqueness of coordinates and addresses
