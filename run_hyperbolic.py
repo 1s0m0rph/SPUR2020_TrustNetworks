@@ -1,5 +1,44 @@
 from Hyperbolic import *
 
+#### Algorithm ideas
+
+# Orthogonal question: when to stop trying paths
+# - when you can't find any more? Seems to use too many nodes
+# - when there is a single failure? Seems too few?
+# - maybe s tries each neighbor once, then stops.
+
+# 1. Find a path
+# 2. For each edge on the path (u,v), tell u to "blacklist" v and never route to v again in this alg.
+# 3. This includes edges (s,v) so s routes through each neighbor at most once.
+# 4. Repeat until s has tried all its neighbors.
+# 5. Somehow, take all this information and find a large set of disjoint paths.
+#    - a proposal: just create a small graph with the union of everything found, and run max-flow on it.
+#    - (Is there a greedy alternative that makes sense?)
+
+
+#### Software engineering stuff
+
+# Function that takes in:
+#  - graph
+#  - algorithm to use
+# And outputs:
+#  - all these measures of how well it did
+
+# Script will: generate some graphs, run some algorithms on them,
+# and output some numbers or plots
+# Example plot: GraphType of size 10, 100, 1000  (horizontal axis)
+#            vs Alg1 #paths_found, Alg2, ...
+# another for amount of compute (total? per node?)
+# (by the way: error bars)
+# another for number of nodes that need to participate?
+
+# In particular: ideally, a function that generates these graphs given number of desired nodes (and edges?)
+# - "Erdos-Renyi"
+# - Power-law or "social network" style
+# - Grid sort of graph
+# - Graphs we throw in for fun
+
+
 N = 100
 q = int((2**1) + 1)
 
