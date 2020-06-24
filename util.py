@@ -56,7 +56,7 @@ def vertex_disjoint_transform(G):
 '''
 use max flow on a modified version of G to find the number of vertex disjoint paths between s and t
 '''
-def vertex_disjoint_paths(G,s,t):
+def vertex_disjoint_paths(G,s,t,retrace=False):
 	#TODO: figure out how many nodes are in the paths this algorithm would give and compare with current blacklisting etc algorithms
 	#first modify G so that two-in two-out motifs evaluate correctly
 	Gp = vertex_disjoint_transform(G)
@@ -65,7 +65,12 @@ def vertex_disjoint_paths(G,s,t):
 		s = 'f{}'.format(s)
 
 	R = nx.algorithms.flow.edmonds_karp(Gp,s,t)
-	return R.graph['flow_value']
+	if retrace:
+		paths = retrace_max_flow_paths(R,s,t)
+		assert(len(paths) == R.graph['flow_value'])
+		return paths
+	else:
+		return R.graph['flow_value']
 
 
 '''
@@ -76,9 +81,8 @@ def retrace_max_flow_paths(R:nx.DiGraph,s,t):
 	exp_q = [s]#exploration queue
 	current = None
 	seen = set()
+	in_path = set()
 	pred = {s:None}#map nodes to predecessors (this should be able to change)
-
-	#TODO finish this
 
 	while len(exp_q) > 0:
 		#run a DFS along some path to t, once we reach t, add that path to paths
@@ -86,13 +90,21 @@ def retrace_max_flow_paths(R:nx.DiGraph,s,t):
 		if current == t:
 			#add the path to paths
 			paths.append(retrace_single_path(pred,t))
+			#reset the things
+			in_path = in_path.union(paths[-1]) - {t}
 			#keep moving
 
 		#add on all neighbors *with flow == 1*
 		for neigh in R.neighbors(current):
 			if (neigh not in seen) and (R[current][neigh]['flow'] > 0):
+				if neigh in pred:
+					pred[neigh] = current
+				else:
+					pred.update({neigh:current})
 				exp_q.append(neigh)
 				seen.add(neigh)
+
+	return paths
 '''
 traverse the predecessor map to figure out a single path
 '''

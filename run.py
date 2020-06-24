@@ -43,7 +43,7 @@ npairs = 1
 # 		if t not in tng[s].neighbors:
 if pair_count % 100 == 0:
 	print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
-exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
+exact_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t,retrace=True)
 
 tng[s].count_vd_paths_to_v3(t,tng[t].coords)
 all_done_flag = False
