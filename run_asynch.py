@@ -1,3 +1,5 @@
+#TODO remove this file when done with testing framework
+
 from stepper_sim import *
 from TN import *
 

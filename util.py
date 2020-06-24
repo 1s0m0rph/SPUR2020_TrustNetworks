@@ -57,7 +57,6 @@ def vertex_disjoint_transform(G):
 use max flow on a modified version of G to find the number of vertex disjoint paths between s and t
 '''
 def vertex_disjoint_paths(G,s,t,retrace=False):
-	#TODO: figure out how many nodes are in the paths this algorithm would give and compare with current blacklisting etc algorithms
 	#first modify G so that two-in two-out motifs evaluate correctly
 	Gp = vertex_disjoint_transform(G)
 	#then run max flow on that graph with the caveat that if we used the fork node transform on s we need to change the start to s
@@ -92,11 +91,13 @@ def retrace_max_flow_paths(R:nx.DiGraph,s,t):
 			paths.append(retrace_single_path(pred,t))
 			#reset the things
 			in_path = in_path.union(paths[-1]) - {t}
+			seen = set()
+			exp_q = [s]
 			#keep moving
 
 		#add on all neighbors *with flow == 1*
 		for neigh in R.neighbors(current):
-			if (neigh not in seen) and (R[current][neigh]['flow'] > 0):
+			if (neigh not in seen) and (neigh not in in_path) and (R[current][neigh]['flow'] > 0):
 				if neigh in pred:
 					pred[neigh] = current
 				else:
@@ -141,3 +142,44 @@ def str_compress(x:str):
 			count += 1
 
 	return r
+
+'''
+networkx-ized version of the older proprietary methods
+
+uses the social network random generation algorithm (connected variant of https://www.pnas.org/content/99/suppl_1/2566)
+'''
+def generate_connected_rand_graph_from_deg_dist(num_nodes:int,approx_reciprocity=1.,distrib=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)):
+	G = nx.DiGraph()
+	G.add_node(0)
+
+	#each node gets a degree from the distribution that is at least 1
+	degrees = [max(1,int(distrib())) for _ in range(num_nodes)]
+	connections_left_to_make = {i for i in range(num_nodes)}#these nodes all have connections left to make
+	total_connections_left_to_make = sum(degrees)
+
+	#randomly connect the nodes already in the network according to their degrees
+	connections_made = 0
+	while (connections_made < total_connections_left_to_make) and (len(connections_left_to_make) > 1):
+		#pick a random starter node among the nodes already in the network
+		i = np.random.choice(list(connections_left_to_make.intersection(G.nodes)))
+		#pick a random other node to connect to i
+		assign_to = np.random.choice(list(connections_left_to_make - {i} - G.neighbors(i)))
+		if assign_to not in G.nodes:
+			G.add_node(assign_to)
+
+		G.add_edge(i,assign_to)
+		connections_made += 1
+		degrees[i] -= 1
+		if degrees[i] == 0:
+			connections_left_to_make.remove(i)
+
+		#reciprocity "guarantees" from a given number
+		if np.random.uniform(0,1) < approx_reciprocity:
+			#then add the edge in the other direction
+			G.add_edge(assign_to,i)
+			connections_made += 1
+			degrees[assign_to] -= 1
+			if degrees[assign_to] == 0:
+				connections_left_to_make.remove(assign_to)
+
+	return G

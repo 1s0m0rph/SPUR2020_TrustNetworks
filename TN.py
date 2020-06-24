@@ -338,7 +338,7 @@ class TNNode:
 		return None
 
 
-def generate_rand_graph_from_deg_dist(num_nodes,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3),approx_reciprocity=1.,node_type=TNNode):
+def generate_rand_graph_from_deg_dist(num_nodes,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3),approx_reciprocity=1.,node_type=TNNode):#TODO remove
 	#use the social network rand gen algorithm to make a new network
 	G = [node_type(i) for i in range(num_nodes)]
 

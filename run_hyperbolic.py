@@ -1,42 +1,5 @@
 from Hyperbolic import *
-
-#### Algorithm ideas
-
-# Orthogonal question: when to stop trying paths
-# - when you can't find any more? Seems to use too many nodes
-# - when there is a single failure? Seems too few?
-# - maybe s tries each neighbor once, then stops.
-
-# 1. Find a path
-# 2. For each edge on the path (u,v), tell u to "blacklist" v and never route to v again in this alg.
-# 3. This includes edges (s,v) so s routes through each neighbor at most once.
-# 4. Repeat until s has tried all its neighbors.
-# 5. Somehow, take all this information and find a large set of disjoint paths.
-#    - a proposal: just create a small graph with the union of everything found, and run max-flow on it.
-#    - (Is there a greedy alternative that makes sense?)
-
-
-#### Software engineering stuff
-
-# Function that takes in:
-#  - graph
-#  - algorithm to use
-# And outputs:
-#  - all these measures of how well it did
-
-# Script will: generate some graphs, run some algorithms on them,
-# and output some numbers or plots
-# Example plot: GraphType of size 10, 100, 1000  (horizontal axis)
-#            vs Alg1 #paths_found, Alg2, ...
-# another for amount of compute (total? per node?)
-# (by the way: error bars)
-# another for number of nodes that need to participate?
-
-# In particular: ideally, a function that generates these graphs given number of desired nodes (and edges?)
-# - "Erdos-Renyi"
-# - Power-law or "social network" style
-# - Grid sort of graph
-# - Graphs we throw in for fun
+#TODO remove this file when done with testing framework
 
 
 N = 100
@@ -77,22 +40,28 @@ pair_count = 0
 
 for s in range(N):
 	for t in range(s+1,N):
-		if t not in tng[s].neighbors:
+		if tng[t] not in tng[s].neighbors:
 			npairs += 1#doing this first so we can get progress reports
 
 # s = 0
 # t = 4
 # npairs = 1
 
+nx_tng = convert_to_nx_graph(tng)
+
 for s in range(N):
 	for t in range(s+1,N):
 		if tng[t] not in tng[s].neighbors:
 			if pair_count % 100 == 0:
 				print('{} of {} ({:.3f}%)'.format(pair_count,npairs,100.*float(pair_count)/float(npairs)))
-			exact_total_paths = vertex_disjoint_paths(convert_to_nx_graph(tng),s,t)
+			# exact_total_paths = vertex_disjoint_paths(nx_tng,s,t)
 
+			paths = vertex_disjoint_paths(nx_tng,s,t,retrace=True)
+			#convert to the form our checker expects
+			paths = [[tng[node_id] for node_id in path] for path in paths]
+			exact_total_paths = len(paths)
 			# paths = tng[s].count_vd_paths_to_hyper_multibl_from_addr(tng[t].saddr)#should technically be using this call, but it's slow when we're doing so many
-			paths = tng[s].count_vd_paths_to_hyper(tng[t].coords,stop_on_first_failure=True)
+			# paths = tng[s].count_vd_paths_to_hyper(tng[t].coords,stop_on_first_failure=True)
 
 			# print('{} of {} total paths found: '.format(len(paths),exact_total_paths))
 
@@ -110,13 +79,16 @@ for s in range(N):
 						print('REPEATED NODE ID: {}'.format(node.id))
 					else:
 						nodes_seen.add(node.id)
+				if prev_node.id != t:
+					print('DESTINATION NOT REACHED (FINAL NODE IS {}, t = {})'.format(prev_node,tng[t]))
 				# print(path)
 
 			paths_found_sum += len(paths)
 			paths_exact_sum += exact_total_paths
 			pair_count += 1
 
-			count_this_pair_network_used = 0#how many nodes had to do something this time around?
+			# count_this_pair_network_used = 0#how many nodes had to do something this time around?
+			count_this_pair_network_used = sum([len(path) for path in paths])#best case
 			#reset all the graph things (this could be done in reality with either a pulse or a timeout)
 			for i in range(len(tng)):
 				tng[i].pulse_pred = {}

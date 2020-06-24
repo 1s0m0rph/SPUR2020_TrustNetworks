@@ -1,5 +1,23 @@
 from TN import *
 
+#TODO implement new partial blacklisting algorithm with path union and maxflow
+"""
+#### Algorithm ideas
+
+Orthogonal question: when to stop trying paths
+- when you can't find any more? Seems to use too many nodes
+- when there is a single failure? Seems too few?
+- maybe s tries each neighbor once, then stops.
+
+1. Find a path
+2. For each edge on the path (u,v), tell u to "blacklist" v and never route to v again in this alg.
+3. This includes edges (s,v) so s routes through each neighbor at most once.
+4. Repeat until s has tried all its neighbors.
+5. Somehow, take all this information and find a large set of disjoint paths.
+   - a proposal: just create a small graph with the union of found paths, and run max-flow on it.
+   - (Is there a greedy alternative that makes sense?)
+"""
+
 '''
 arguments are complex numbers
 '''
@@ -9,7 +27,7 @@ def hyper_dist(a:complex,b:complex):
 '''
 modified to work with hyperbolic-embed graphs
 '''
-def generate_rand_graph_from_deg_dist_hyper(num_nodes,q,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)):
+def generate_rand_graph_from_deg_dist_hyper(num_nodes,q,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)):#TODO remove
 	#use the social network rand gen algorithm to make a new network
 	G = [HyperNode(i,q) for i in range(num_nodes)]
 	#root is 0
@@ -391,15 +409,15 @@ class HyperNode(TNNode):
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
-	def count_vd_paths_to_hyper_multibl_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf')):
+	def count_vd_paths_to_hyper_multibl_from_addr(self,dest_addr,max_dist_scale=float('inf')):
 		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper_multibl(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale)
+		return self.count_vd_paths_to_hyper_multibl(dest_coords,max_dist_scale=max_dist_scale)
 
 
 	'''
 	this should technically be private access
 	'''
-	def count_vd_paths_to_hyper_multibl(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf')):
+	def count_vd_paths_to_hyper_multibl(self,dest_coords,max_dist_scale=float('inf')):
 		st_dist = hyper_dist(self.coords,dest_coords)
 		#start a search to dest from ourselves
 		candidate_paths = []
