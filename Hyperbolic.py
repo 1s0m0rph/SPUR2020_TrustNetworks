@@ -192,6 +192,12 @@ class HyperNode(TNNode):
 	def __repr__(self):
 		return "HN, {} (@{})".format(self.id,self.saddr)
 
+	def reset_all_and_return_ops(self):
+		ops = super().reset_all_and_return_ops()
+		self.d_add_search_flag = False
+		self.pulse_blacklisted = set()
+		self.max_neighbor_called = -1
+		return ops
 
 	'''
 	convert an int address to a succinct address
@@ -513,7 +519,7 @@ This could be done decentralized according to the processes laid out in A. Segal
 
 returns both the number of paths and the nodes used (assumed to be the entire subgraph)
 '''
-def hyper_VD_paths_local(HG:list,s:int,t:int,max_dist_scale=float('inf'),dist_measure='path',autoscale_increment=None):
+def hyper_VD_paths_local(HG:List[HyperNode],s:int,t:int,max_dist_scale=float('inf'),dist_measure='path',autoscale_increment=None):
 	#first reduce HG down
 	HGp = []
 	nodes_removed = set()

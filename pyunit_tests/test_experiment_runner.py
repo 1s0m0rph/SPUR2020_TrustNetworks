@@ -13,7 +13,7 @@ def graphs_are_same(nxg:nx.Graph,tng:List[TNNode]):
 
 	return True
 
-class TestRunner(TestCase):
+class TestExperimentRunner(TestCase):
 	def test_convert_nx_graph_to_TN(self):
 		nxg = nx.Graph()
 		nxg.add_edges_from([[0,1],[0,2],[1,2],[2,3],[2,4],[1,4]])
@@ -31,7 +31,10 @@ class TestRunner(TestCase):
 		#hypernodes
 		nxg = nx.Graph()
 		nxg.add_edges_from([[0,2],[0,3],[0,4],[1,3],[1,4],[1,5],[2,3],[3,4],[3,5],[3,6],[5,6]])
-		tng = convert_nx_graph_to_TN(nxg,HyperNode)
+		tng = convert_nx_graph_to_TN(nxg,HyperNode,3)
+		#make sure all the coords are set up
+		for node in tng:
+			assert((type(node.coords) == np.complex128) or (type(node.coords) == complex))
 		tng_nx = convert_to_nx_graph(tng,nx.Graph)
 		assert(nx.is_isomorphic(nxg,tng_nx))
 
@@ -66,5 +69,5 @@ class TestRunner(TestCase):
 
 	def test_generate_random_graph(self):
 		#mostly want to make sure args work how we expect them to
-		a = generate_random_graph(generate_connected_ER_graph,TNNode,100,0.5,seed=0)
-		pass
+		generate_random_graph(generate_connected_ER_graph,TNNode,[100,0.5],{'seed':0})
+		generate_random_graph(generate_connected_ER_graph,HyperNode,[100,0.5],{'seed':0},[3])

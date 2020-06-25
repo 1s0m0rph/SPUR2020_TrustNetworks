@@ -34,6 +34,15 @@ class TNNode_Stepper(TNNode):
 	def __repr__(self):
 		return 'SSTNN {}'.format(self.id)
 
+	def reset_all_and_return_ops(self):
+		ops = super().reset_all_and_return_ops()
+		self.time = 0
+		self.operations = []
+		self.paths = []
+		self.neighbors_to_call = []
+		self.initial_TTL = float('inf')
+		return ops
+
 	'''
 	do all of the operations in our queue (we assume that if the time for those operations hasn't come yet according to our clock, the function we call will automatically not perform them)
 	'''

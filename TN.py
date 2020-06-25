@@ -109,6 +109,15 @@ class TNNode:
 		self.resetted_flag = True
 		self.pulse_pred = {}
 		self.search_blacklist_flag = False
+		
+		
+	def reset_all_and_return_ops(self):
+		self.pulse_pred = {}
+		self.resetted_flag = False
+		self.search_blacklist_flag = False
+		ops = self.operations_done
+		self.operations_done = 0
+		return ops
 
 	'''
 	do another graph search to reset pulse numbers
