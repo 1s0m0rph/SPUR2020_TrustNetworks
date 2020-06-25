@@ -5,11 +5,6 @@ General utils etc for TN/Trust Networks
 from util import *
 
 class TNNode:
-	INITIAL_MAX_NEIGHBOR_SEPARATION = 1#this is k, in the math
-	MAX_NEIGHBOR_SEPARATION_INCREMENT = 1#for dynamic separation increase, what should the increment size be?
-	NUM_COORD_DIMENSIONS = 2
-	ADDRESS_BIT_SIZE = 256
-
 	def __init__(self,node_id):
 		self.id = node_id
 		self.private_key = None
@@ -19,8 +14,6 @@ class TNNode:
 
 		self.is_eve = False
 
-		self.coords = np.zeros((self.NUM_COORD_DIMENSIONS,),dtype=np.uint16)#this will be set when we first add a neighbor
-		#FIXME coordinate vector dtypes need to be dynamic with number of coordinate dimensions
 
 		#self.generate_keys()#this would be done in reality, but we won't do it now for the sake of determinism
 
@@ -48,81 +41,6 @@ class TNNode:
 	def add_public_key_in_person(self,t_node):
 		self.neighbors.add(t_node)
 		self.neighbors_ids.add(t_node.id)
-
-		neighbor_coord_centroid = np.mean(np.array([n.coords for n in self.neighbors],dtype=np.uint16),axis=0,dtype=np.uint16)
-		max_separation = self.INITIAL_MAX_NEIGHBOR_SEPARATION
-		disp,choices = self.generate_coords(max_separation,self.NUM_COORD_DIMENSIONS,-np.array(neighbor_coord_centroid,dtype=np.int32))
-		#check if these coords are okay by pinging the network
-		while self.check_is_coord_in_use_init(neighbor_coord_centroid+disp):
-			choices_left = True
-			for coord_choices in choices:
-				if len(coord_choices) == 0:#all have to have valid choices, not just some
-					choices_left = False
-
-			if not choices_left:
-				#increase k
-				max_separation += self.MAX_NEIGHBOR_SEPARATION_INCREMENT
-				choices = None#for the generation method
-
-			disp,choices = self.generate_coords(max_separation,self.NUM_COORD_DIMENSIONS,-np.array(neighbor_coord_centroid,dtype=np.int32),choices)
-
-
-		self.coords = neighbor_coord_centroid + disp
-
-	'''
-	generate n_dim coords such that the norm (manhattan so it's guaranteed to be integers) of the vector formed by those coords is leq max_norm
-
-	coord choices is used to ensure determinism
-	max negative is used to ensure the coordinates are always non-negative
-		this is a list of length n_dim with integer value <= 0 for each element
-	'''
-	def generate_coords(self,max_norm,n_dim,max_negative:list,coord_choices=None):
-		single_bound = int(max_norm / n_dim)#this is manhattan-norm specific; norm of biggest vector will be this times n_dim which will be no larger than max_norm
-		if coord_choices is None:
-			coord_choices = [{i for i in range(max(-single_bound,max_negative[j]),single_bound+1)} for j in range(n_dim)]#want to be able to go negative
-		coords = []
-		for i in range(n_dim):
-			coord = np.random.choice(list(coord_choices[i]))
-			#don't make this choice again
-			coord_choices[i].remove(coord)
-			coords.append(coord)
-
-		return np.array(coords,dtype=np.int32),coord_choices
-
-	def check_is_coord_in_use_init(self,coords):
-		self.pulse_pred.update({-1:None})
-		self.resetted_flag = False
-		is_in_use = False
-		for neighbor in self.neighbors:
-			if neighbor.check_is_coord_in_use(coords,self,-1):
-				is_in_use = True
-				break
-
-		self.reset_search()
-		return is_in_use
-
-	'''
-	semicentralized (fully decentralized is a trivial step from here) check for in-use coordinates (so coords are unique)
-	'''
-	def check_is_coord_in_use(self,coords,pred,pulse_num):
-		if pulse_num in self.pulse_pred:
-			return False
-
-		if np.allclose(self.coords,coords):
-			return True
-
-		self.pulse_pred.update({pulse_num:pred})
-		self.resetted_flag = False#this is for later
-
-		#otherwise ask our neighbors if they're using that number
-		for neighbor in self.neighbors:
-			in_use = neighbor.check_is_coord_in_use(coords,self,pulse_num)
-			if in_use:
-				return True
-
-		return False
-
-
 
 	'''
 	tell me how many *paths* (not necessarily vertex-disjoint!) there are from me to some destination node
@@ -244,12 +162,6 @@ class TNNode:
 		return self.pulse_pred[pulse_num].v2_vd_blacklist_zip(pulse_num,[self] + path)
 
 
-	"""
-	V3
-	
-	(doesn't need to be synchronized since it's depth first and therefore won't be done in parallel)
-	"""
-
 	'''
 	clean up the predecessor tree
 	'''
@@ -265,78 +177,6 @@ class TNNode:
 		#call pred tree clean on all successors
 		for succ in successors:
 			succ.pred_tree_clean()
-
-	'''
-	3rd version uses heuristics -- coordinates
-	
-	if you want the heuristic function to be sorted backwards (that is, in descending order), negate the output of the heuristic function
-	
-	built-in heuristics:
-		'dot' (default) : largest among neighbors n dot product of v-n vector and v-t vector ('most correct direction')
-		'dist' : shortest distance to t among all neighbors n ('closest neighbor') -- min over n of norm(coord(n) - coord(t)), using manhattan norm
-		'dist-manh': synonym for dist
-		'dist-eucl': as with dist-manh, but uses euclidean norm
-		
-		so far all the heuristics seem to perform basically the same (except that manhattan distance is faster)
-	'''
-	def count_vd_paths_to_v3(self,dest_id,dest_coords,heuristic=None):
-		if (heuristic is None) or (heuristic == 'dot'):
-			heuristic = lambda x: - np.dot(self.coords - x.coords, self.coords - dest_coords)#heuristic A: largest dot-product (most in the right direction)
-		elif (heuristic == 'dist') or (heuristic == 'dist-manh'):
-			heuristic = lambda x: manh_norm(x.coords - dest_coords)
-		elif heuristic == 'dist-eucl':
-			heuristic = lambda x:eucl_norm(x.coords - dest_coords)
-
-		self.search_blacklist_flag = True
-		#start a search to dest from each neighbor
-		neighbors_to_call = list(sorted(list(self.neighbors),key=heuristic))
-		paths = []
-		for neighbor in neighbors_to_call:
-			self.operations_done += 1
-			path = neighbor.v3_vd_paths_interm(dest_id,dest_coords,self,heuristic)
-			if path is not None:
-				paths.append(path)
-				self.pred_tree_clean()#TODO does it make sense to pred clean here/is there somewhere else it should be done?
-
-		for neighbor in self.neighbors:
-			neighbor.reset_search()
-
-		self.search_blacklist_flag = False
-
-		return paths
-
-	'''
-	someone has asked me to find dest
-	'''
-	def v3_vd_paths_interm(self,dest_id,dest_coords,pred,heuristic):
-		self.operations_done += 1
-		if self.id == dest_id:#this has to happen before the visited check to implement path shadowing
-			#blacklist nodes on this path
-			self.pulse_pred.update({-1:pred})
-			self.resetted_flag = False
-			self.search_blacklist_flag = False#t is never blacklisted, but the function after sets it to be so
-			path = self.v2_vd_blacklist_zip(-1,[])
-			return path
-
-		if -1 in self.pulse_pred:
-			return None#we've already been visited in this search
-
-		if self.search_blacklist_flag:
-			return None#we are already blacklisted (or have been visited in this search), so don't go this way
-
-		#we've relayed this pulse now
-		self.pulse_pred.update({-1:pred})
-		self.resetted_flag = False
-
-		#otherwise ask the *right* neighbor(s) if they know the muffin man
-		neighbors_to_call = list(sorted(list(self.neighbors),key=heuristic))
-		for neighbor in neighbors_to_call:
-			path = neighbor.v3_vd_paths_interm(dest_id,dest_coords,self,heuristic)
-			if path is not None:
-				return path
-
-		return None
-
 
 def generate_rand_graph_from_deg_dist(num_nodes,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3),approx_reciprocity=1.,node_type=TNNode):#TODO remove
 	#use the social network rand gen algorithm to make a new network
@@ -372,8 +212,8 @@ def generate_rand_graph_from_deg_dist(num_nodes,dist=lambda:scipy.stats.truncnor
 	return G
 
 
-def convert_to_nx_graph(TNG):
-	nxG = nx.DiGraph()
+def convert_to_nx_graph(TNG,graph_type=nx.DiGraph):
+	nxG = graph_type()
 	nxG.add_nodes_from([node.id for node in TNG])
 	for node in TNG:
 		for connection in node.neighbors:
