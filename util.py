@@ -3,6 +3,7 @@ import networkx as nx
 import re
 import rsa
 import scipy.stats
+from typing import List, Union
 
 '''
 'add one' (LE) to the set (thinking of it is a bitvector/binary set)
@@ -106,6 +107,7 @@ def retrace_max_flow_paths(R:nx.DiGraph,s,t):
 				seen.add(neigh)
 
 	return paths
+
 '''
 traverse the predecessor map to figure out a single path
 '''
@@ -135,7 +137,7 @@ def str_compress(x:str):
 				r += '-' + (hex(count)[2:]) + '-' + x[i]
 			else:
 				r += r[-1] * (count - 1) + x[i]
-			#the dashes and intermediate number add 3 chars total, so it only helps (when compared to just repeating the digit) if the count is more than 4 (it's the same if count = 4)
+			#the dashes, intermediate number, and preceding number add 4 chars total, so it only helps (when compared to just repeating the digit) if the count is more than 4 (it's the same if count = 4)
 			current = x[i]
 			count = 1
 		else:
@@ -144,11 +146,39 @@ def str_compress(x:str):
 	return r
 
 '''
+undoes the compression from str_compress (note: outputs a string of hex)
+'''
+def str_decompress(x:str):
+	r = x[0]
+	repeat = 0#how many times should I repeat the next number?
+	get_repetition_number = False
+	rnum = ''
+	for i in range(1,len(x)):
+		if get_repetition_number:
+			if x[i] == '-':
+				#then we've gotten the whole thing
+				repeat = int(rnum,16)-1
+				rnum = ''
+				get_repetition_number = False
+			else:
+				rnum += x[i]
+		elif x[i] == '-':
+			get_repetition_number = True
+		else:
+			r += (r[-1] * repeat) + x[i]
+			repeat = 0
+
+	if rnum != '':
+		repeat = int(rnum,16)-1
+
+	return r + (r[-1] * repeat)
+
+'''
 networkx-ized version of the older proprietary methods
 
 uses the social network random generation algorithm (connected variant of https://www.pnas.org/content/99/suppl_1/2566)
 '''
-def generate_connected_rand_graph_from_deg_dist(num_nodes:int,approx_reciprocity=1.,distrib=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)):
+def generate_connected_rand_graph_from_deg_dist(num_nodes:int,approx_reciprocity=1.,distrib=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3)) -> nx.DiGraph:
 	G = nx.DiGraph()
 	G.add_node(0)
 
@@ -163,7 +193,7 @@ def generate_connected_rand_graph_from_deg_dist(num_nodes:int,approx_reciprocity
 		#pick a random starter node among the nodes already in the network
 		i = np.random.choice(list(connections_left_to_make.intersection(G.nodes)))
 		#pick a random other node to connect to i
-		assign_to = np.random.choice(list(connections_left_to_make - {i} - G.neighbors(i)))
+		assign_to = np.random.choice(list(connections_left_to_make - {i} - set(G.neighbors(i))))
 		if assign_to not in G.nodes:
 			G.add_node(assign_to)
 
@@ -181,5 +211,27 @@ def generate_connected_rand_graph_from_deg_dist(num_nodes:int,approx_reciprocity
 			degrees[assign_to] -= 1
 			if degrees[assign_to] == 0:
 				connections_left_to_make.remove(assign_to)
+
+	return G
+
+
+'''
+Generate a connected, undirected erdos-renyi random graph. Connect the graph by fudging vertices that aren't in the largest CC
+'''
+def generate_connected_ER_graph(num_nodes:int,approx_p:float,seed=None) -> nx.Graph:
+	G = nx.generators.fast_gnp_random_graph(num_nodes,approx_p,seed=seed)
+	np.random.seed(seed)
+	#find the largest connected component (or rather, which nodes are not in it)
+	ccs = [set(x) for x in sorted(nx.connected_components(G),key=len,reverse=False)]#biggest last
+
+	#randomly connect using as few edges as possible all of these other ccs
+	list_largest_cc = list(ccs[-1])
+	for cc in ccs[:-1]:
+		#pick a random node to connect to the main cc
+		node_i = np.random.choice(list(cc))
+		#pick a random node to connect this node to within the main cc
+		node_j = np.random.choice(list_largest_cc)
+		#connect them -- this cc is now a part of the main one
+		G.add_edge(node_i,node_j)
 
 	return G

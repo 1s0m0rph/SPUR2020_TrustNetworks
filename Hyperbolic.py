@@ -62,35 +62,6 @@ def generate_rand_graph_from_deg_dist_hyper(num_nodes,q,dist=lambda:scipy.stats.
 	return G
 
 '''
-undoes the compression from str_compress (note: outputs a string of hex)
-'''
-def str_decompress(x:str):
-	r = x[0]
-	repeat = 0#how many times should I repeat the next number?
-	get_repetition_number = False
-	rnum = ''
-	for i in range(1,len(x)):
-		if get_repetition_number:
-			if x[i] == '-':
-				#then we've gotten the whole thing
-				repeat = int(rnum,16)-1
-				rnum = ''
-				get_repetition_number = False
-			else:
-				rnum += x[i]
-		elif x[i] == '-':
-			get_repetition_number = True
-		else:
-			r += (r[-1] * repeat) + x[i]
-			repeat = 0
-
-	if rnum != '':
-		repeat = int(rnum,16)-1
-
-	return r + (r[-1] * repeat)
-
-
-'''
 convert a succinct address (in-person sharing) to coordinates by running the generators forward
 '''
 def addr_to_coords_v0(q,addr):
