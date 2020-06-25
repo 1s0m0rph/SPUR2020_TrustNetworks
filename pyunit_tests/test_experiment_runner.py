@@ -1,5 +1,5 @@
 from unittest import TestCase
-from run_test import *
+from run_experiment import *
 
 def graphs_are_same(nxg:nx.Graph,tng:List[TNNode]):
 	for node in nxg.nodes:
