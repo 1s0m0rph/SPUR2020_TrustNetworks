@@ -27,6 +27,7 @@ In particular: ideally, a function that generates these graphs given number of d
 from TN import *
 from Hyperbolic import *
 from stepper_sim import *
+import argparse
 
 '''
 graph generation wrapper
@@ -317,4 +318,58 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 	return ret
 
 
-print(run_many_pairs(generate_random_graph(generate_connected_ER_graph,HyperNode,(100,0.1),None,[3]),'hyper',progress_interval=100,compare_to_opt=True))
+'''
+Using the same graph generation algorithm, calculate all the numbers we want for many different sizes of graphs
+'''
+def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,show_progress=True,generator_args=(),generator_kwargs=None,runner_kwargs=None):
+	if generator_kwargs is None:
+		generator_kwargs = {}
+	if runner_kwargs is None:
+		runner_kwargs = {}
+
+	results = []
+	for ndone,size in enumerate(graph_sizes):
+		if show_progress:
+			print('{} of {} ({:.1f}%)'.format(ndone,len(graph_sizes),100. * float(ndone)/float(len(graph_sizes))))
+		#generate the graph
+		G = generate_random_graph(*generator_args,**generator_kwargs)
+		result_this_graph = run_many_pairs(G,vd_path_alg,**runner_kwargs)
+		results.append([size,result_this_graph])
+
+	return results
+
+"""
+Given rough bounds, give me some graph sizes
+"""
+def generate_graph_sizes(num_sizes:int,min_size,max_size,num_repeat:int):
+	graph_sizes_proto = np.linspace(min_size,max_size,num=num_sizes//num_repeat)
+	#fill this with all the necessary repeats
+	graph_sizes = []
+	for gs in graph_sizes_proto:
+		for _ in range(num_repeat):
+			graph_sizes.append(gs)
+
+	return graph_sizes
+
+
+#argument parsers yayayay
+
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser(description="Experiment runner for VD path algorithm comparison")
+	parser.add_argument('-a','--path-algorithm',nargs=1,type=str,default=[DECENTRALIZED_PATH_ALGS[0]],help='Which algorithm will be used to calculate VD paths between s and t')
+	parser.add_argument('-g','--num-graph-sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
+	parser.add_argument('-l','--min-graph-size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
+	parser.add_argument('-h','--max-graph-size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
+	parser.add_argument('-r','--num-repeat',nargs=1,type=int,default=[1],help='How many times to repeat each graph size')
+	parser.add_argument('-p','--sample-pair-proportion',nargs=1,type=float,default=[1.0],help='What proportion of the possible pairs should be tested?')
+	parser.add_argument('-m','--max-npairs',nargs=1,type=float,default=[float('inf')],help='What is the maximum number of pairs to test for a given graph?')
+	parser.add_argument('-S','--no-show-big-progress',nargs='?',help='Should we not show progress at the graph-testing level? (by default, we will)')
+	parser.add_argument('-s','--show-little-progress',nargs='?',help='Should we show progress at the pair level? (by default, we won\'t)')
+	parser.add_argument('-o','--compare-to-optimal',nargs='?',help='Should we calculate the optimal network usage and return a comparison between the algorithm\'s usage and that?')
+	parser.add_argument('-c','--validate-paths',nargs='?',help="Should we validate at every step that the paths returned are VD and correct?")
+	parser.add_argument('-M','--max-paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
+	parser.add_argument('-x','--max-dist-scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
+	parser.add_argument('-f','--stop-on-first-failure',nargs='?',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
+
+
+	#TODO finish the parser and do some tests
