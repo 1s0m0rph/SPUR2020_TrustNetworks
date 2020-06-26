@@ -260,7 +260,7 @@ returns (mapping from metric string to tuple of mean and stdev)
 	proportion of network usage compared to optimal (max-flow) mean and standard deviation <only if "compare_to_opt" is true>
 	messages sent per node (among those that send messages) mean and standard deviation <only for decentralized algorithms>
 '''
-def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,sample_proportion=1.,seed=None,max_npairs=float('inf'),progress_interval=0,compare_to_opt=False,**kwargs):
+def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,sample_pair_proportion=1.,seed=None,max_npairs=float('inf'),progress_interval=0,compare_to_optimal=False,**kwargs):
 	np.random.seed(seed)
 	### SUMMARY STATS WILL BE CALCULATED ON THESE
 	prop_paths_found_agg = []
@@ -278,7 +278,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 				pairs_possible.append((s,t))
 
 	#how many will we do?
-	npairs = int(min(max_npairs,float(len(pairs_possible))*sample_proportion))
+	npairs = int(min(max_npairs,float(len(pairs_possible)) * sample_pair_proportion))
 
 	#what will the pairs be?
 	pairs = [pairs_possible[i] for i in np.random.choice(list(range(len(pairs_possible))),size=npairs,replace=False)]
@@ -292,7 +292,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 
 		exact_total_paths = 0
 		opt_num_nodes = 0
-		if compare_to_opt:
+		if compare_to_optimal:
 			exact_paths = vertex_disjoint_paths(nxG,s,t,retrace=True)
 			opt_num_nodes = sum([len(path) for path in exact_paths])
 			exact_total_paths = len(exact_paths)
@@ -305,7 +305,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		#throw them in the aggregators
 		prop_paths_found_agg.append(float(num_paths_found)/float(exact_total_paths))
 		num_nodes_used_agg.append(num_nodes_used)
-		if compare_to_opt:
+		if compare_to_optimal:
 			usage_vs_optimal_agg.append(num_nodes_used/opt_num_nodes)
 		if vd_path_alg not in CENTRALIZED_PATH_ALGS:
 			messages_sent_per_node_used_agg.append(num_messages_sent)
@@ -320,7 +320,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 	ret = {'prop_paths_found':(prop_paths_found_mean,prop_paths_found_stdev),
 		   'num_nodes_used':(num_nodes_used_mean,num_nodes_used_stdev)
 		   }
-	if compare_to_opt:
+	if compare_to_optimal:
 		usage_vs_optimal_mean = np.mean(usage_vs_optimal_agg)
 		usage_vs_optimal_stdev = np.std(usage_vs_optimal_agg,ddof=1)
 		ret.update({'usage_vs_optimal':(usage_vs_optimal_mean,usage_vs_optimal_stdev)})
@@ -394,15 +394,15 @@ if __name__ == '__main__':
 	parser.add_argument('-r','--num_repeat',nargs=1,type=int,default=[1],help='How many times to repeat each graph size')
 	parser.add_argument('-p','--sample_pair_proportion',nargs=1,type=float,default=[1.0],help='What proportion of the possible pairs should be tested?')
 	parser.add_argument('-m','--max_npairs',nargs=1,type=float,default=[float('inf')],help='What is the maximum number of pairs to test for a given graph?')
-	parser.add_argument('-S','--no_show_big_progress',nargs='?',help='Should we not show progress at the graph-testing level? (by default, we will)')
-	parser.add_argument('-s','--show_little_progress',nargs='?',help='Should we show progress at the pair level? (by default, we won\'t)')
-	parser.add_argument('-o','--compare_to_optimal',nargs='?',help='Should we calculate the optimal network usage and return a comparison between the algorithm\'s usage and that?')
-	parser.add_argument('-c','--validate_paths',nargs='?',help="Should we validate at every step that the paths returned are VD and correct?")
+	parser.add_argument('-S','--no_show_graph_progress',default=False,action='store_true',help='Should we not show progress at the graph-testing level? (by default, we will)')
+	parser.add_argument('-i','--pair_progress_interval',nargs=1,type=int,default=[0],help="How often [after how many trials] should we show progress at the pair level? (default is zero; i.e. we dont' show progress at all)")
+	parser.add_argument('-c','--compare_to_optimal',default=False,action='store_true',help='Should we calculate the optimal network usage and return a comparison between the algorithm\'s usage and that?')
+	parser.add_argument('-C','--validate_paths',default=False,action='store_true',help="Should we validate at every step that the paths returned are VD and correct?")
 	parser.add_argument('-M','--max_paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
 	parser.add_argument('-x','--max_dist_scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
-	parser.add_argument('-f','--stop_on_first_failure',nargs='?',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
+	parser.add_argument('-f','--stop_on_first_failure',default=False,action='store_true',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
 	parser.add_argument('-q','--hyper_embed_degree',nargs=1,type=int,default=[3],help="What degree should the hyperbolic embed addressing tree be? This must be one more than a power of two (i.e. 3,5,9,17...)")
-	#TODO add file output argument/code
+	parser.add_argument('-o','--output',nargs=1,type=str,default=None,help="What file should we output to? (defaults to stdout)")
 	args = parser.parse_args()
 
 	#reformat these in the way the program expects
@@ -421,16 +421,16 @@ if __name__ == '__main__':
 	#high level runner args begin
 	sample_pair_proportion = args.sample_pair_proportion[0]
 	max_npairs = args.max_npairs[0]
-	show_big_progress = args.no_show_big_progress is None
+	show_graph_progress = not args.no_show_graph_progress
 	#end
 	#single pair args begin
-	show_sp_progress = args.show_little_progress is not None
-	compare_to_optimal = args.compare_to_optimal is not None
-	validate_paths = args.validate_paths is not None
+	sp_progress = args.pair_progress_interval[0]
+	compare_to_optimal = args.compare_to_optimal
+	validate_paths = args.validate_paths
 	#end
 	#vd path alg args begin
 	path_algorithm_str = args.path_algorithm[0]
-	stop_on_first_failure = args.stop_on_first_failure is not None
+	stop_on_first_failure = args.stop_on_first_failure
 	path_algorithm_kwargs = {}
 	for desc,val in zip(['max_paths','max_dist_scale','stop_on_first_failure'],[args.max_paths[0],args.max_dist_scale[0],stop_on_first_failure]):
 		if path_algorithm_str in PATH_ALGS_OPTIONS_USED_INV[desc]:
@@ -441,6 +441,13 @@ if __name__ == '__main__':
 		q = args.hyper_embed_degree[0]
 		node_args += (q,)
 	# end
+	#aggregate runner kwargs
+	runner_kwargs = path_algorithm_kwargs
+	runner_kwargs.update({'sample_pair_proportion':sample_pair_proportion,
+						  'max_npairs':max_npairs,
+						  'compare_to_optimal':compare_to_optimal,
+						  'progress_interval':sp_progress
+						  })
 
 
 	#prepare the things
@@ -448,25 +455,49 @@ if __name__ == '__main__':
 
 
 	#get the results
-	results = run_many_pairs_on_many_random_graphs(graph_sizes,path_algorithm_str,generator,show_big_progress,graph_generator_arguments,None,node_args,None,path_algorithm_kwargs)
+	results = run_many_pairs_on_many_random_graphs(graph_sizes,path_algorithm_str,generator,show_graph_progress,graph_generator_arguments,None,node_args,None,runner_kwargs)
 
-
-	print('\n')#get some space between the progress updater and the results
-	#print the results
-	print('graph_size',end='')
-	#static metric ordering
-	ordering = ['prop_paths_found','num_nodes_used','usage_vs_optimal','messages_sent_per_node_used']
-	#print description first
-	for metric in ordering:
-		if metric in results[1][0]:
-			print(',{}'.format(metric),end='')
-
-	#then print values
-	for graph_size,res_dict in results:
-		print('{}'.format(graph_size),end='')
+	if args.output is None:
+		#output to stdout
+		print('\n')#get some space between the progress updater and the results
+		#print the results
+		print('graph_size',end='')
+		#static metric ordering
+		ordering = ['prop_paths_found','num_nodes_used','usage_vs_optimal','messages_sent_per_node_used']
+		#print description first
 		for metric in ordering:
-			if metric in res_dict:
-				print(',{}'.format(res_dict[metric]))
+			if metric in results[1][0]:
+				print(',{}'.format(metric),end='')
+		print()
 
+		#then print values
+		for graph_size,res_dict in results:
+			print('{}'.format(graph_size),end='')
+			for metric in ordering:
+				if metric in res_dict:
+					print(',{}'.format(res_dict[metric]),end='')
+			print()
+	else:
+		#output to outfile
+		with open(args.output[0],'w') as out:
+			# print the results
+			out.write('graph_size')
+			# static metric ordering
+			ordering = ['prop_paths_found','num_nodes_used','usage_vs_optimal','messages_sent_per_node_used']
+			# print description first
+			for metric in ordering:
+				if metric in results[0][1]:
+					out.write(',{}'.format(metric))
+			out.write('\n')
+
+			# then print values
+			for graph_size,res_dict in results:
+				out.write(str(graph_size))
+				for metric in ordering:
+					if metric in res_dict:
+						out.write(',{}'.format(res_dict[metric]))
+				out.write('\n')
+
+		print('################################################## DONE ####################################################')
 
 	#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaand we're done. again. hopefully pycharm won't randomly decide to yeet half of this again
