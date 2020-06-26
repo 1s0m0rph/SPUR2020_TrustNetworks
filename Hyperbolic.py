@@ -1,6 +1,5 @@
 from TN import *
 
-#TODO implement new partial blacklisting algorithm with path union and maxflow
 """
 #### Algorithm ideas
 
@@ -8,14 +7,6 @@ Orthogonal question: when to stop trying paths
 - when you can't find any more? Seems to use too many nodes
 - when there is a single failure? Seems too few?
 - maybe s tries each neighbor once, then stops.
-
-1. Find a path
-2. For each edge on the path (u,v), tell u to "blacklist" v and never route to v again in this alg.
-3. This includes edges (s,v) so s routes through each neighbor at most once.
-4. Repeat until s has tried all its neighbors.
-5. Somehow, take all this information and find a large set of disjoint paths.
-   - a proposal: just create a small graph with the union of found paths, and run max-flow on it.
-   - (Is there a greedy alternative that makes sense?)
 """
 
 '''
@@ -422,6 +413,7 @@ class HyperNode(TNNode):
 		if (pulse_num not in self.pulse_pred) or (self.pulse_pred[pulse_num] is None):
 			return path #drop the first one (s)
 
+		self.operations_done += 1#in order to retrace these paths we need to send another message
 		return self.pulse_pred[pulse_num].multi_blacklist_zip(pulse_num,[self] + path)
 
 

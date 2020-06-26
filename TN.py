@@ -26,7 +26,7 @@ class TNNode:
 		self.resetted_flag = False#in a real system this would be a search id that would automatically reset after some time for each node
 
 		# metrics
-		self.operations_done = 0  # have I had to do any work in the current pass through?
+		self.operations_done = 0  #how many messages have I had to *send* during the current run?#TODO rename this to messages_sent or something
 
 	def generate_keys(self):
 		self.public_key,self.private_key = rsa.newkeys(16)
@@ -167,6 +167,7 @@ class TNNode:
 		if pulse_num not in self.pulse_pred:
 			return path#this could also return the reconstructed path, but would require more data to be passed between nondes
 
+		self.operations_done += 1#in order to retrace these paths, we need to send a message
 		self.search_blacklist_flag = True
 		return self.pulse_pred[pulse_num].v2_vd_blacklist_zip(pulse_num,[self] + path)
 

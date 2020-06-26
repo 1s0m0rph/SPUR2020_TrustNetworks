@@ -4,6 +4,7 @@ Framework for testing VD algorithms
 this will always run some number of trials on some number of graphs, and output metrics in a csv format
 
 #TODO ADD TESTING (UNIT TESTS)!!! (where?)
+#TODO parallelize testing so it goes faster
 
 #### Software engineering stuff#TODO
 
@@ -288,7 +289,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 	nxG = convert_to_nx_graph(G)
 	for s,t in pairs:
 		if (progress_interval != 0) and ((pairs_run % progress_interval) == 0):
-			print('{} of {} ({:.1f}%) pairs evaluated'.format(pairs_run,npairs,100. * float(pairs_run) / float(npairs)))
+			print('{} of {} pairs evaluated ({:.1f}%)'.format(pairs_run,npairs,100. * float(pairs_run) / float(npairs)))
 
 		exact_total_paths = 0
 		opt_num_nodes = 0
