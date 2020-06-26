@@ -33,7 +33,7 @@ transform G st vanilla max flow will count the paths correctly
 this we do by adding, for each node with in-degree > 1 and out-degree >1, a dummy node (called a "fork" node)
 that the original node points to and moving all of the original node's out-edges to be the out-edges of the fork node
 '''
-def vertex_disjoint_transform(G):
+def vertex_disjoint_transform(G:nx.DiGraph) -> nx.DiGraph:
 	Gp = nx.DiGraph()
 	Gp.add_edges_from(G.edges)#copy G
 
@@ -57,9 +57,9 @@ def vertex_disjoint_transform(G):
 '''
 use max flow on a modified version of G to find the number of vertex disjoint paths between s and t
 '''
-def vertex_disjoint_paths(G,s,t,retrace=False):
+def vertex_disjoint_paths(G:nx.Graph,s,t,retrace=False) -> Union[List,int]:
 	#first modify G so that two-in two-out motifs evaluate correctly
-	Gp = vertex_disjoint_transform(G)
+	Gp = vertex_disjoint_transform(nx.DiGraph(G))#shallow copy is fine
 	#then run max flow on that graph with the caveat that if we used the fork node transform on s we need to change the start to s
 	if 'f{}'.format(s) in Gp.nodes:
 		s = 'f{}'.format(s)
@@ -70,13 +70,13 @@ def vertex_disjoint_paths(G,s,t,retrace=False):
 		assert(len(paths) == R.graph['flow_value'])
 		return paths
 	else:
-		return R.graph['flow_value']
+		return int(R.graph['flow_value'])
 
 
 '''
 Given a residual network output of some nx flow algorithm, give me a list of <min vertex cut> VD paths 
 '''
-def retrace_max_flow_paths(R:nx.DiGraph,s,t):
+def retrace_max_flow_paths(R:nx.DiGraph,s,t) -> List:
 	paths = []
 	exp_q = [s]#exploration queue
 	current = None
@@ -111,7 +111,7 @@ def retrace_max_flow_paths(R:nx.DiGraph,s,t):
 '''
 traverse the predecessor map to figure out a single path
 '''
-def retrace_single_path(pred,current,path=None):
+def retrace_single_path(pred,current,path=None) -> list:
 	if path is None:
 		path = []
 	if pred[current] is None:
@@ -127,7 +127,7 @@ def retrace_single_path(pred,current,path=None):
 '''
 Compresses a hex string representation of some integer down by indicating repeated digits (mostly useful for human-readability)
 '''
-def str_compress(x:str):
+def str_compress(x:str) -> str:
 	current = x[0]
 	count = 1
 	r = x[0]
@@ -148,7 +148,7 @@ def str_compress(x:str):
 '''
 undoes the compression from str_compress (note: outputs a string of hex)
 '''
-def str_decompress(x:str):
+def str_decompress(x:str) -> str:
 	r = x[0]
 	repeat = 0#how many times should I repeat the next number?
 	get_repetition_number = False
@@ -235,3 +235,28 @@ def generate_connected_ER_graph(num_nodes:int,approx_p:float,seed=None) -> nx.Gr
 		G.add_edge(node_i,node_j)
 
 	return G
+
+
+'''
+Calculate a (networkx) graph which is the union of all of these paths (which are just lists of things [anything hashable will do]). Assumes edges are undirected
+'''
+def path_union(paths:list) -> nx.Graph:
+	G = nx.Graph()
+
+	for path in paths:
+		prev_node = path[0]
+		for node in path[1:]:
+			G.add_edge(prev_node,node)
+			prev_node = node
+
+	return G
+
+'''
+Given a list of lists of things (list of paths), find the maximum VD paths through the graph defined by those paths
+'''
+def vd_paths_from_candidates(paths:list,s,t) -> list:
+	#first compute the path union
+	U = path_union(paths)
+	#then run the maxflow based (centralized) VD algorithm on that
+	paths = vertex_disjoint_paths(U,s,t,retrace=True)
+	return paths

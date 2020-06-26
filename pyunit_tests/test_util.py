@@ -72,3 +72,20 @@ class TestGenerate_connected_ER_graph(TestCase):
 		x = '01-5-0001-6-A'
 		comp = str_decompress(x)
 		assert (comp == '011111000111111A')
+
+	def test_path_union(self):
+		paths = [[0,1,2,3,4],
+				 [0,5,2,8,4],
+				 [0,6,7,8,4]]
+		expected_G = nx.Graph()
+		expected_G.add_edges_from([[0,1],[0,5],[0,6],[1,2],[2,3],[2,5],[2,8],[3,4],[4,8],[6,7],[7,8]])
+		actual_G = path_union(paths)
+		assert(nx.is_isomorphic(expected_G,actual_G))
+
+	def test_vd_paths_from_candidates(self):
+		paths = [[0,1,2,3,4],
+				 [0,5,2,8,4],
+				 [0,6,7,8,4]]
+		expected_num = 2
+		actual_num = len(vd_paths_from_candidates(paths,0,4))
+		assert(expected_num == actual_num)

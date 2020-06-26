@@ -120,7 +120,7 @@ ALL_PATH_ALGS = DECENTRALIZED_PATH_ALGS + CENTRALIZED_PATH_ALGS
 #inverse map from algorithms to the options they can use (that is, maps options to the algorithms that use them)
 PATH_ALGS_OPTIONS_USED_INV = {'max_paths':['hyper','hyper-addr'],
 							  'max_dist_scale':['hyper','hyper-addr','hyper-multi','hyper-multi-addr'],
-							  'stop_on_first_failure':['hyper','hyper-addr'],#TODO add this option for TN-v2?
+							  'stop_on_first_failure':['hyper','hyper-addr','hyper-multi','hyper-multi-addr'],#TODO add this option for TN-v2?
 							  #TODO add TTL
 							  }
 
@@ -191,7 +191,7 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 	elif vd_path_alg == 'hyper-multi':
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
-		paths = G[s].count_vd_paths_to_hyper_multibl_from_addr(G[t].coords,**kwargs)
+		paths = G[s].count_vd_paths_to_hyper_multibl(G[t].coords,**kwargs)
 	elif vd_path_alg == 'local-mf':
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
@@ -288,7 +288,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 	nxG = convert_to_nx_graph(G)
 	for s,t in pairs:
 		if (progress_interval != 0) and ((pairs_run % progress_interval) == 0):
-			print('{} of {} ({:.1f}%)'.format(pairs_run,npairs,100. * float(pairs_run) / float(npairs)))
+			print('{} of {} ({:.1f}%) pairs evaluated'.format(pairs_run,npairs,100. * float(pairs_run) / float(npairs)))
 
 		exact_total_paths = 0
 		opt_num_nodes = 0
@@ -355,7 +355,7 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,s
 	results = []
 	for ndone,size in enumerate(graph_sizes):
 		if show_progress:
-			print('{} of {} ({:.1f}%)'.format(ndone,len(graph_sizes),100. * float(ndone)/float(len(graph_sizes))))
+			print('Starting graph {} of {} ({:.1f}% done)'.format(ndone+1,len(graph_sizes),100. * float(ndone)/float(len(graph_sizes))))
 		#generate the graph
 		generator_args = [size] + list(generator_args)#size must be dynamic, so it isn't already a part of the generator args
 		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],generator_args,generator_kwargs,node_args,node_kwargs)

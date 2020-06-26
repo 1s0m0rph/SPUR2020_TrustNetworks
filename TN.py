@@ -187,40 +187,6 @@ class TNNode:
 		for succ in successors:
 			succ.pred_tree_clean()
 
-def generate_rand_graph_from_deg_dist(num_nodes,dist=lambda:scipy.stats.truncnorm.rvs(0,float('inf'),loc=3,scale=3),approx_reciprocity=1.,node_type=TNNode):#TODO remove
-	#use the social network rand gen algorithm to make a new network
-	G = [node_type(i) for i in range(num_nodes)]
-
-	#assign a degree to each node
-	degrees = [max(1,int(dist())) for i in range(num_nodes)]#make sure everything is connected to at least one
-	connections_left_to_make = {i for i in range(num_nodes)}#these nodes all have connections left to make
-	total_connections_to_make = sum(degrees)
-
-	#randomly connect the nodes according to their degrees
-	connections_made = 0
-	while (connections_made < total_connections_to_make) and (len(connections_left_to_make) > 1):
-		#pick a random starter node
-		i = np.random.choice(list(connections_left_to_make))
-		#pick a random other node to assign to
-		assign_to = G[np.random.choice(list(connections_left_to_make - {i} - G[i].neighbors))]#no self-edges, no multiedges
-		G[i].add_public_key_in_person(assign_to)
-		connections_made += 1
-		degrees[i] -= 1
-		if degrees[i] == 0:
-			connections_left_to_make.remove(i)
-
-		#reciprocity guarantees based on the given number
-		if np.random.uniform(0,1) < approx_reciprocity:
-			#then add the edge going back to i
-			assign_to.add_public_key_in_person(G[i])
-			connections_made += 1
-			degrees[assign_to.id] -= 1
-			if degrees[assign_to.id] == 0:
-				connections_left_to_make.remove(assign_to.id)
-
-	return G
-
-
 def convert_to_nx_graph(TNG,graph_type=nx.DiGraph):
 	nxG = graph_type()
 	nxG.add_nodes_from([node.id for node in TNG])
