@@ -1,6 +1,8 @@
 """
 Framework for testing VD algorithms
 
+this will always run some number of trials on some number of graphs, and output metrics in a csv format
+
 #TODO ADD TESTING (UNIT TESTS)!!! (where?)
 
 #### Software engineering stuff#TODO
@@ -112,6 +114,19 @@ HYPER_EMBED_PATH_ALGS = ['hyper-addr',
 						 'hyper-multi']
 
 CENTRALIZED_PATH_ALGS = ['local-mf']
+
+ALL_PATH_ALGS = DECENTRALIZED_PATH_ALGS + CENTRALIZED_PATH_ALGS
+
+#inverse map from algorithms to the options they can use (that is, maps options to the algorithms that use them)
+PATH_ALGS_OPTIONS_USED_INV = {'max_paths':['hyper','hyper-addr'],
+							  'max_dist_scale':['hyper','hyper-addr','hyper-multi','hyper-multi-addr'],
+							  'stop_on_first_failure':['hyper','hyper-addr'],#TODO add this option for TN-v2?
+							  #TODO add TTL
+							  }
+
+PATH_ALGS_NODE_TYPE = {x:TNNode for x in ALL_PATH_ALGS}#by default everything uses TNNodes
+PATH_ALGS_NODE_TYPE.update({x:TNNode_Stepper for x in SYNCHRONIZED_PATH_ALGS})
+PATH_ALGS_NODE_TYPE.update({x:HyperNode for x in HYPER_EMBED_PATH_ALGS})
 
 '''
 Run vd_path_alg on G from s to t
@@ -239,7 +254,7 @@ if sample_proportion is less than 1, we will randomly sample among the possible 
 
 if progress interval is set at 0, no progress is printed, else progress wil be printed every <progress_interval> pairs
 
-returns (8 tuple)
+returns (mapping from metric string to tuple of mean and stdev)
 	proportion of total paths found mean and standard deviation
 	number of nodes used mean and standard deviation <approximate for centralized algorithms>
 	proportion of network usage compared to optimal (max-flow) mean and standard deviation <only if "compare_to_opt" is true>
@@ -302,26 +317,36 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 	prop_paths_found_stdev = np.std(prop_paths_found_agg,ddof=1)
 	num_nodes_used_mean = np.mean(num_nodes_used_agg)
 	num_nodes_used_stdev = np.std(num_nodes_used_agg,ddof=1)
-	ret = (prop_paths_found_mean,prop_paths_found_stdev,num_nodes_used_mean,num_nodes_used_stdev)
+	ret = {'prop_paths_found':(prop_paths_found_mean,prop_paths_found_stdev),
+		   'num_nodes_used':(num_nodes_used_mean,num_nodes_used_stdev)
+		   }
 	if compare_to_opt:
 		usage_vs_optimal_mean = np.mean(usage_vs_optimal_agg)
 		usage_vs_optimal_stdev = np.std(usage_vs_optimal_agg,ddof=1)
-		ret += (usage_vs_optimal_mean,usage_vs_optimal_stdev)
+		ret.update({'usage_vs_optimal':(usage_vs_optimal_mean,usage_vs_optimal_stdev)})
 	if vd_path_alg not in CENTRALIZED_PATH_ALGS:
 		messages_sent_per_node_used_mean = np.mean(messages_sent_per_node_used_agg)
 		messages_sent_per_node_used_stdev = np.std(messages_sent_per_node_used_agg,ddof = 1)
-		ret += (messages_sent_per_node_used_mean,messages_sent_per_node_used_stdev)
-	# _mean = np.mean(_agg)
-	# _stdev = np.std(_agg,ddof = 1)
-	# ret += (_mean,_stdev)
+		ret.update({'messages_sent_per_node_used':(messages_sent_per_node_used_mean,messages_sent_per_node_used_stdev)})
 
 	return ret
 
+GRAPH_TYPES = ['con-er',#connected erdos renyi
+			   'pnas-sn',#pnas social network
+			   #ADD OTHERS HERE
+			   ]
+
+GRAPH_FNS = {'con-er':generate_connected_ER_graph,
+			 'pnas-sn':generate_connected_rand_graph_from_deg_dist,
+			 #add map from graph type string onto the actual generating function here
+			 }
 
 '''
 Using the same graph generation algorithm, calculate all the numbers we want for many different sizes of graphs
 '''
-def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,show_progress=True,generator_args=(),generator_kwargs=None,runner_kwargs=None):
+def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,show_progress=True,generator_args=(),generator_kwargs=None,node_args=(),node_kwargs=None,runner_kwargs=None):
+	if node_kwargs is None:
+		node_kwargs = {}
 	if generator_kwargs is None:
 		generator_kwargs = {}
 	if runner_kwargs is None:
@@ -332,7 +357,9 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,show_progre
 		if show_progress:
 			print('{} of {} ({:.1f}%)'.format(ndone,len(graph_sizes),100. * float(ndone)/float(len(graph_sizes))))
 		#generate the graph
-		G = generate_random_graph(*generator_args,**generator_kwargs)
+		generator_args = [size] + list(generator_args)#size must be dynamic, so it isn't already a part of the generator args
+		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],generator_args,generator_kwargs,node_args,node_kwargs)
+		generator_args = generator_args[1:]#remove this size so that the next size calls the generator correctly
 		result_this_graph = run_many_pairs(G,vd_path_alg,**runner_kwargs)
 		results.append([size,result_this_graph])
 
@@ -342,12 +369,14 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,show_progre
 Given rough bounds, give me some graph sizes
 """
 def generate_graph_sizes(num_sizes:int,min_size,max_size,num_repeat:int):
+	if (num_sizes % num_repeat) != 0:
+		print("WARNING: requested number of graphs ({}) is not compatible with number of size repetitions ({}).".format(num_sizes,num_repeat))
 	graph_sizes_proto = np.linspace(min_size,max_size,num=num_sizes//num_repeat)
 	#fill this with all the necessary repeats
 	graph_sizes = []
 	for gs in graph_sizes_proto:
 		for _ in range(num_repeat):
-			graph_sizes.append(gs)
+			graph_sizes.append(int(np.round(gs)))
 
 	return graph_sizes
 
@@ -356,20 +385,88 @@ def generate_graph_sizes(num_sizes:int,min_size,max_size,num_repeat:int):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Experiment runner for VD path algorithm comparison")
-	parser.add_argument('-a','--path-algorithm',nargs=1,type=str,default=[DECENTRALIZED_PATH_ALGS[0]],help='Which algorithm will be used to calculate VD paths between s and t')
-	parser.add_argument('-g','--num-graph-sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
-	parser.add_argument('-l','--min-graph-size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
-	parser.add_argument('-h','--max-graph-size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
-	parser.add_argument('-r','--num-repeat',nargs=1,type=int,default=[1],help='How many times to repeat each graph size')
-	parser.add_argument('-p','--sample-pair-proportion',nargs=1,type=float,default=[1.0],help='What proportion of the possible pairs should be tested?')
-	parser.add_argument('-m','--max-npairs',nargs=1,type=float,default=[float('inf')],help='What is the maximum number of pairs to test for a given graph?')
-	parser.add_argument('-S','--no-show-big-progress',nargs='?',help='Should we not show progress at the graph-testing level? (by default, we will)')
-	parser.add_argument('-s','--show-little-progress',nargs='?',help='Should we show progress at the pair level? (by default, we won\'t)')
-	parser.add_argument('-o','--compare-to-optimal',nargs='?',help='Should we calculate the optimal network usage and return a comparison between the algorithm\'s usage and that?')
-	parser.add_argument('-c','--validate-paths',nargs='?',help="Should we validate at every step that the paths returned are VD and correct?")
-	parser.add_argument('-M','--max-paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
-	parser.add_argument('-x','--max-dist-scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
-	parser.add_argument('-f','--stop-on-first-failure',nargs='?',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
+	parser.add_argument('-a','--path_algorithm',nargs=1,type=str,choices=ALL_PATH_ALGS,default=[DECENTRALIZED_PATH_ALGS[0]],help='Which algorithm will be used to calculate VD paths between s and t.')
+	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
+	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=[0.5],help="First graph generator argument (for ER graphs, this is p, for directeds it's approximate reciprocity)")
+	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
+	parser.add_argument('-l','--min_graph_size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
+	parser.add_argument('-b','--max_graph_size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
+	parser.add_argument('-r','--num_repeat',nargs=1,type=int,default=[1],help='How many times to repeat each graph size')
+	parser.add_argument('-p','--sample_pair_proportion',nargs=1,type=float,default=[1.0],help='What proportion of the possible pairs should be tested?')
+	parser.add_argument('-m','--max_npairs',nargs=1,type=float,default=[float('inf')],help='What is the maximum number of pairs to test for a given graph?')
+	parser.add_argument('-S','--no_show_big_progress',nargs='?',help='Should we not show progress at the graph-testing level? (by default, we will)')
+	parser.add_argument('-s','--show_little_progress',nargs='?',help='Should we show progress at the pair level? (by default, we won\'t)')
+	parser.add_argument('-o','--compare_to_optimal',nargs='?',help='Should we calculate the optimal network usage and return a comparison between the algorithm\'s usage and that?')
+	parser.add_argument('-c','--validate_paths',nargs='?',help="Should we validate at every step that the paths returned are VD and correct?")
+	parser.add_argument('-M','--max_paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
+	parser.add_argument('-x','--max_dist_scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
+	parser.add_argument('-f','--stop_on_first_failure',nargs='?',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
+	parser.add_argument('-q','--hyper_embed_degree',nargs=1,type=int,default=[3],help="What degree should the hyperbolic embed addressing tree be? This must be one more than a power of two (i.e. 3,5,9,17...)")
+	#TODO add file output argument/code
+	args = parser.parse_args()
+
+	#reformat these in the way the program expects
+	#graph size args begin
+	num_graph_sizes = args.num_graph_sizes[0]
+	min_graph_size = args.min_graph_size[0]
+	max_graph_size = args.max_graph_size[0]
+	num_repeat = args.num_repeat[0]
+	#end
+	#graph generator args begin
+	generator = GRAPH_FNS[args.graph_type[0]]
+	graph_generator_arguments = [args.graph_arg_0[0],
+								 #add others here and in the parser (-1, -2, ...)
+								 ]
+	#end
+	#high level runner args begin
+	sample_pair_proportion = args.sample_pair_proportion[0]
+	max_npairs = args.max_npairs[0]
+	show_big_progress = args.no_show_big_progress is None
+	#end
+	#single pair args begin
+	show_sp_progress = args.show_little_progress is not None
+	compare_to_optimal = args.compare_to_optimal is not None
+	validate_paths = args.validate_paths is not None
+	#end
+	#vd path alg args begin
+	path_algorithm_str = args.path_algorithm[0]
+	stop_on_first_failure = args.stop_on_first_failure is not None
+	path_algorithm_kwargs = {}
+	for desc,val in zip(['max_paths','max_dist_scale','stop_on_first_failure'],[args.max_paths[0],args.max_dist_scale[0],stop_on_first_failure]):
+		if path_algorithm_str in PATH_ALGS_OPTIONS_USED_INV[desc]:
+			path_algorithm_kwargs.update({desc:val})
+	# node args begin
+	node_args = ()
+	if path_algorithm_str in HYPER_EMBED_PATH_ALGS:
+		q = args.hyper_embed_degree[0]
+		node_args += (q,)
+	# end
 
 
-	#TODO finish the parser and do some tests
+	#prepare the things
+	graph_sizes = generate_graph_sizes(num_graph_sizes,min_graph_size,max_graph_size,num_repeat)
+
+
+	#get the results
+	results = run_many_pairs_on_many_random_graphs(graph_sizes,path_algorithm_str,generator,show_big_progress,graph_generator_arguments,None,node_args,None,path_algorithm_kwargs)
+
+
+	print('\n')#get some space between the progress updater and the results
+	#print the results
+	print('graph_size',end='')
+	#static metric ordering
+	ordering = ['prop_paths_found','num_nodes_used','usage_vs_optimal','messages_sent_per_node_used']
+	#print description first
+	for metric in ordering:
+		if metric in results[1][0]:
+			print(',{}'.format(metric),end='')
+
+	#then print values
+	for graph_size,res_dict in results:
+		print('{}'.format(graph_size),end='')
+		for metric in ordering:
+			if metric in res_dict:
+				print(',{}'.format(res_dict[metric]))
+
+
+	#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaand we're done. again. hopefully pycharm won't randomly decide to yeet half of this again

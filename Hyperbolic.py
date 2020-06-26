@@ -313,14 +313,14 @@ class HyperNode(TNNode):
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
-	def count_vd_paths_to_hyper_from_addr(self,dest_addr,npaths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
+	def count_vd_paths_to_hyper_from_addr(self,dest_addr,max_paths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
 		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper(dest_coords,npaths=npaths,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
+		return self.count_vd_paths_to_hyper(dest_coords,max_paths=max_paths,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
 
 	'''
 	this should technically be private access
 	'''
-	def count_vd_paths_to_hyper(self,dest_coords,npaths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
+	def count_vd_paths_to_hyper(self,dest_coords,max_paths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
 		self.search_blacklist_flag = True
 		st_dist = hyper_dist(self.coords,dest_coords)
 		#start a search to dest from each neighbor
@@ -332,7 +332,7 @@ class HyperNode(TNNode):
 				path_ret = neighbor.gnh_interm(dest_coords,self,st_dist,max_dist_scale)
 				if path_ret is not None:
 					paths.append(path_ret)
-					if len(paths) >= npaths:
+					if len(paths) >= max_paths:
 						break
 				elif stop_on_first_failure:
 					break
@@ -527,7 +527,7 @@ def hyper_VD_paths_local(HG:List[HyperNode],s:int,t:int,max_dist_scale=float('in
 	short_path = None
 	if dist_measure == 'path':
 		#find a shortest path from s to t
-		short_path = HG[s].count_vd_paths_to_hyper(HG[t].coords,npaths=1)[0]
+		short_path = HG[s].count_vd_paths_to_hyper(HG[t].coords,max_paths=1)[0]
 	elif dist_measure == 't':
 		short_path = [HG[t]]
 	else:
