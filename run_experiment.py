@@ -493,7 +493,7 @@ if __name__ == '__main__':
 		#print description first
 		for metric in ordering:
 			if metric in results[0][2]:
-				print(',{}'.format(metric),end='')
+				print(',{}_mean,{}_stdev'.format(metric,metric),end='')
 		print()
 
 		#then print values
@@ -501,7 +501,7 @@ if __name__ == '__main__':
 			print('{},{}'.format(graph_size,npairs),end='')
 			for metric in ordering:
 				if metric in res_dict:
-					print(',{}'.format(res_dict[metric]),end='')
+					print(',{},{}'.format(*res_dict[metric]),end='')
 			print()
 	else:
 		#output to outfile
@@ -513,7 +513,7 @@ if __name__ == '__main__':
 			# print description first
 			for metric in ordering:
 				if metric in results[0][2]:
-					out.write(',{}'.format(metric))
+					out.write(',{}_mean,{}_stdev'.format(metric,metric))
 			out.write('\n')
 
 			# then print values
@@ -522,7 +522,7 @@ if __name__ == '__main__':
 				out.write(',{}'.format(npairs))
 				for metric in ordering:
 					if metric in res_dict:
-						out.write(',{}'.format(res_dict[metric]))
+						out.write(',{},{}'.format(*res_dict[metric]))
 				out.write('\n')
 
 		print('################################################## DONE ####################################################')
