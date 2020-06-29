@@ -478,6 +478,7 @@ if __name__ == '__main__':
 		while os.path.isfile(try_file):
 			try_file = file_prefix + '_{}'.format(post_num) + file_type
 			post_num += 1
+		output = try_file
 
 	#get the results
 	results = run_many_pairs_on_many_random_graphs(graph_sizes,path_algorithm_str,generator,show_graph_progress,graph_generator_arguments,None,node_args,None,runner_kwargs)
@@ -491,7 +492,7 @@ if __name__ == '__main__':
 		ordering = ['prop_paths_found','num_nodes_used','optimal_usage','messages_sent_per_node_used']
 		#print description first
 		for metric in ordering:
-			if metric in results[1][0]:
+			if metric in results[0][2]:
 				print(',{}'.format(metric),end='')
 		print()
 
@@ -511,14 +512,14 @@ if __name__ == '__main__':
 			ordering = ['prop_paths_found','num_nodes_used','optimal_usage','messages_sent_per_node_used']
 			# print description first
 			for metric in ordering:
-				if metric in results[0][1]:
+				if metric in results[0][2]:
 					out.write(',{}'.format(metric))
 			out.write('\n')
 
 			# then print values
 			for graph_size,npairs,res_dict in results:
 				out.write(str(graph_size))
-				out.write(str(npairs))
+				out.write(',{}'.format(npairs))
 				for metric in ordering:
 					if metric in res_dict:
 						out.write(',{}'.format(res_dict[metric]))
