@@ -350,17 +350,13 @@ class HyperNode(TNNode):
 		#start a search to dest from ourselves
 		candidate_paths = []
 		pulse_num = 0
-		self.operations_done += 1
-		path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
-		pulse_num = 1#don't send the 0-pulse twice
 		while self.max_neighbor_called < (len(self.neighbors)-1):#semantically identical to just doing the neighbor loop
+			path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
+			pulse_num += 1
 			if path_ret is not None:
 				candidate_paths.append([self] + path_ret)
 			elif stop_on_first_failure:
 				break
-			path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
-			self.operations_done +=  1
-			pulse_num +=  1
 
 		self.reset_search()
 

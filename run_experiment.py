@@ -31,6 +31,7 @@ from TN import *
 from Hyperbolic import *
 from stepper_sim import *
 import argparse
+import os.path
 
 '''
 graph generation wrapper
@@ -266,7 +267,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 	### SUMMARY STATS WILL BE CALCULATED ON THESE
 	prop_paths_found_agg = []
 	num_nodes_used_agg = []
-	usage_vs_optimal_agg = []
+	optimal_usage_agg = []
 	messages_sent_per_node_used_agg = []
 	###
 
@@ -307,9 +308,9 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		prop_paths_found_agg.append(float(num_paths_found)/float(exact_total_paths))
 		num_nodes_used_agg.append(num_nodes_used)
 		if compare_to_optimal:
-			usage_vs_optimal_agg.append(num_nodes_used/opt_num_nodes)
+			optimal_usage_agg.append(opt_num_nodes)
 		if vd_path_alg not in CENTRALIZED_PATH_ALGS:
-			messages_sent_per_node_used_agg.append(num_messages_sent)
+			messages_sent_per_node_used_agg.append(float(num_messages_sent)/float(num_nodes_used))
 
 		pairs_run += 1
 
@@ -322,15 +323,15 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		   'num_nodes_used':(num_nodes_used_mean,num_nodes_used_stdev)
 		   }
 	if compare_to_optimal:
-		usage_vs_optimal_mean = np.mean(usage_vs_optimal_agg)
-		usage_vs_optimal_stdev = np.std(usage_vs_optimal_agg,ddof=1)
-		ret.update({'usage_vs_optimal':(usage_vs_optimal_mean,usage_vs_optimal_stdev)})
+		optimal_usage_mean = np.mean(optimal_usage_agg)
+		optimal_usage_stdev = np.std(optimal_usage_agg,ddof=1)
+		ret.update({'optimal_usage':(optimal_usage_mean,optimal_usage_stdev)})
 	if vd_path_alg not in CENTRALIZED_PATH_ALGS:
 		messages_sent_per_node_used_mean = np.mean(messages_sent_per_node_used_agg)
 		messages_sent_per_node_used_stdev = np.std(messages_sent_per_node_used_agg,ddof = 1)
 		ret.update({'messages_sent_per_node_used':(messages_sent_per_node_used_mean,messages_sent_per_node_used_stdev)})
 
-	return ret
+	return npairs,ret
 
 GRAPH_TYPES = ['con-er',#connected erdos renyi
 			   'pnas-sn',#pnas social network
@@ -356,13 +357,16 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,s
 	results = []
 	for ndone,size in enumerate(graph_sizes):
 		if show_progress:
-			print('Starting graph {} of {} ({:.1f}% done)'.format(ndone+1,len(graph_sizes),100. * float(ndone)/float(len(graph_sizes))))
+			print('Starting graph {} of {}'.format(ndone+1,len(graph_sizes)))
 		#generate the graph
 		generator_args = [size] + list(generator_args)#size must be dynamic, so it isn't already a part of the generator args
 		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],generator_args,generator_kwargs,node_args,node_kwargs)
 		generator_args = generator_args[1:]#remove this size so that the next size calls the generator correctly
-		result_this_graph = run_many_pairs(G,vd_path_alg,**runner_kwargs)
-		results.append([size,result_this_graph])
+		npairs_this_graph, result_this_graph = run_many_pairs(G,vd_path_alg,**runner_kwargs)
+		results.append([size,npairs_this_graph,result_this_graph])
+		if show_progress:
+			print('Finished graph {} of {} ({:.1f}% done)'.format(ndone + 1,len(graph_sizes),100. * float(ndone) / float(len(graph_sizes))))
+			print(results[-1])
 
 	return results
 
@@ -404,6 +408,7 @@ if __name__ == '__main__':
 	parser.add_argument('-f','--stop_on_first_failure',default=False,action='store_true',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
 	parser.add_argument('-q','--hyper_embed_degree',nargs=1,type=int,default=[3],help="What degree should the hyperbolic embed addressing tree be? This must be one more than a power of two (i.e. 3,5,9,17...)")
 	parser.add_argument('-o','--output',nargs=1,type=str,default=None,help="What file should we output to? (defaults to stdout)")
+	parser.add_argument('-O','--overwrite_output_files',default=False,action='store_true',help="Should we overwrite preexisting output files? (default is to add a number at the end)")
 	args = parser.parse_args()
 
 	#reformat these in the way the program expects
@@ -428,6 +433,10 @@ if __name__ == '__main__':
 	sp_progress = args.pair_progress_interval[0]
 	compare_to_optimal = args.compare_to_optimal
 	validate_paths = args.validate_paths
+	output = args.output
+	if output is not None:
+		output = output[0]
+	overwrite = args.overwrite_output_files
 	#end
 	#vd path alg args begin
 	path_algorithm_str = args.path_algorithm[0]
@@ -442,6 +451,7 @@ if __name__ == '__main__':
 		q = args.hyper_embed_degree[0]
 		node_args += (q,)
 	# end
+
 	#aggregate runner kwargs
 	runner_kwargs = path_algorithm_kwargs
 	runner_kwargs.update({'sample_pair_proportion':sample_pair_proportion,
@@ -453,18 +463,32 @@ if __name__ == '__main__':
 
 	#prepare the things
 	graph_sizes = generate_graph_sizes(num_graph_sizes,min_graph_size,max_graph_size,num_repeat)
+	if (not overwrite) and (output is not None):
+		#get the prefix and file extension (e.g. 'file' and '.csv' for output='file.csv')
+		file_re_match = re.match(r'(.*)(\..+)',output)
+		file_prefix = output
+		file_type = ""
+		if file_re_match is not None:
+			file_prefix = file_re_match.group(1)
+			file_type = file_re_match.group(2)
 
+		#make sure the given output file name is okay (not already in use here)
+		post_num = 0
+		try_file = output
+		while os.path.isfile(try_file):
+			try_file = file_prefix + '_{}'.format(post_num) + file_type
+			post_num += 1
 
 	#get the results
 	results = run_many_pairs_on_many_random_graphs(graph_sizes,path_algorithm_str,generator,show_graph_progress,graph_generator_arguments,None,node_args,None,runner_kwargs)
 
-	if args.output is None:
+	if output is None:
 		#output to stdout
 		print('\n')#get some space between the progress updater and the results
 		#print the results
-		print('graph_size',end='')
+		print('graph_size,npairs',end='')
 		#static metric ordering
-		ordering = ['prop_paths_found','num_nodes_used','usage_vs_optimal','messages_sent_per_node_used']
+		ordering = ['prop_paths_found','num_nodes_used','optimal_usage','messages_sent_per_node_used']
 		#print description first
 		for metric in ordering:
 			if metric in results[1][0]:
@@ -472,19 +496,19 @@ if __name__ == '__main__':
 		print()
 
 		#then print values
-		for graph_size,res_dict in results:
-			print('{}'.format(graph_size),end='')
+		for graph_size,npairs,res_dict in results:
+			print('{},{}'.format(graph_size,npairs),end='')
 			for metric in ordering:
 				if metric in res_dict:
 					print(',{}'.format(res_dict[metric]),end='')
 			print()
 	else:
 		#output to outfile
-		with open(args.output[0],'w') as out:
+		with open(output,'w') as out:
 			# print the results
-			out.write('graph_size')
+			out.write('graph_size,npairs')
 			# static metric ordering
-			ordering = ['prop_paths_found','num_nodes_used','usage_vs_optimal','messages_sent_per_node_used']
+			ordering = ['prop_paths_found','num_nodes_used','optimal_usage','messages_sent_per_node_used']
 			# print description first
 			for metric in ordering:
 				if metric in results[0][1]:
@@ -492,8 +516,9 @@ if __name__ == '__main__':
 			out.write('\n')
 
 			# then print values
-			for graph_size,res_dict in results:
+			for graph_size,npairs,res_dict in results:
 				out.write(str(graph_size))
+				out.write(str(npairs))
 				for metric in ordering:
 					if metric in res_dict:
 						out.write(',{}'.format(res_dict[metric]))
