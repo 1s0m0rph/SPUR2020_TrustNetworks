@@ -6,7 +6,7 @@ this will always run some number of trials on some number of graphs, and output 
 #TODO ADD TESTING (UNIT TESTS)!!! (where?)
 #TODO parallelize testing so it goes faster
 
-#### Software engineering stuff#TODO
+#### Software engineering stuff
 
 Function that takes in:
 	- graph
@@ -317,7 +317,10 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		if compare_to_optimal:
 			optimal_usage_agg.append(opt_num_nodes)
 		if vd_path_alg not in CENTRALIZED_PATH_ALGS:
-			messages_sent_per_node_used_agg.append(float(num_messages_sent)/float(num_nodes_used))
+			if num_nodes_used != 0:
+				messages_sent_per_node_used_agg.append(float(num_messages_sent)/float(num_nodes_used))
+			else:
+				messages_sent_per_node_used_agg.append(float('inf'))
 
 		pairs_run += 1
 
@@ -407,7 +410,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Experiment runner for VD path algorithm comparison")
 	parser.add_argument('-a','--path_algorithm',nargs=1,type=str,choices=ALL_PATH_ALGS,default=['only-opt'],help='Which algorithm will be used to calculate VD paths between s and t.')
 	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
-	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=[0.5],help="First graph generator argument (for ER graphs, this is p, for directeds it's approximate reciprocity)")
+	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=[1],help="First graph generator argument (for ER graphs, this is the average degree, for directeds it's approximate reciprocity)")
 	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
 	parser.add_argument('-l','--min_graph_size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
 	parser.add_argument('-b','--max_graph_size',nargs=1,type=int,default=[250],help='Maximum graph size to test')

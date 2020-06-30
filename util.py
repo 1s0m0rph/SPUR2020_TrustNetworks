@@ -56,6 +56,8 @@ def vertex_disjoint_transform(G:nx.DiGraph) -> nx.DiGraph:
 
 '''
 use max flow on a modified version of G to find the number of vertex disjoint paths between s and t
+
+between the transform and the actual max flow algorithm, on big graphs this can take a looooooooooong time to run
 '''
 def vertex_disjoint_paths(G:nx.Graph,s,t,retrace=False) -> Union[List,int]:
 	#first modify G so that two-in two-out motifs evaluate correctly
@@ -218,7 +220,8 @@ def generate_connected_rand_graph_from_deg_dist(num_nodes:int,approx_reciprocity
 '''
 Generate a connected, undirected erdos-renyi random graph. Connect the graph by fudging vertices that aren't in the largest CC
 '''
-def generate_connected_ER_graph(num_nodes:int,approx_p:float,seed=None) -> nx.Graph:
+def generate_connected_ER_graph(num_nodes:int,avg_degree_approx:float,seed=None) -> nx.Graph:
+	approx_p = avg_degree_approx / (2*(num_nodes - 1))#from that kh = 2*|E|/|V| and Ex[|E|] = n*(n-1)*p
 	G = nx.generators.fast_gnp_random_graph(num_nodes,approx_p,seed=seed)
 	np.random.seed(seed)
 	#find the largest connected component (or rather, which nodes are not in it)
