@@ -71,3 +71,19 @@ class TestExperimentRunner(TestCase):
 		#mostly want to make sure args work how we expect them to
 		generate_random_graph(generate_connected_ER_graph,TNNode,[100,0.5],{'seed':0})
 		generate_random_graph(generate_connected_ER_graph,HyperNode,[100,0.5],{'seed':0},[3])
+
+	def test_pick_n_random_pairs(self):
+		#small graph for debugging
+		nxg = nx.Graph()
+		nxg.add_edges_from([[0,2],[0,3],[0,4],[1,3],[1,4],[1,5],[2,3],[3,4],[3,5],[3,6],[5,6]])
+		G =  convert_nx_graph_to_TN(nxg,HyperNode,3)#q=3
+		#this graph has 10 possible pairs
+		npairs = 10
+		pairs = pick_n_random_pairs(G,npairs)
+		assert(len(pairs) == npairs)
+
+		for s,t in pairs:
+			assert(G[t] not in G[s].neighbors)
+
+		npairs_fail = 11
+		self.assertRaises(Exception,pick_n_random_pairs,G,npairs_fail)

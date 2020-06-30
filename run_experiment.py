@@ -115,7 +115,7 @@ HYPER_EMBED_PATH_ALGS = ['hyper-addr',
 						 'hyper-multi-addr',
 						 'hyper-multi']
 
-CENTRALIZED_PATH_ALGS = ['local-mf']
+CENTRALIZED_PATH_ALGS = ['only-opt','local-mf']
 
 ALL_PATH_ALGS = DECENTRALIZED_PATH_ALGS + CENTRALIZED_PATH_ALGS
 
@@ -141,6 +141,7 @@ path alg possibilities:
 	'hyper-multi-addr':	HyperNode.count_vd_paths_to_hyper_multibl_from_addr(dest address, max distance scale = inf, stop on first fail = false)
 	'hyper-multi':		HyperNode.count_vd_paths_to_hyper_multibl(dest coordinates, max distance scale = inf, stop on first fail = false)
 	'local-mf':			hyper_VD_paths_local(hyperbolic graph, start, target, max distance scale = inf, distance measure = 'path', autoscale increment = none)
+	'only-opt':			vertex_disjoint_paths(nx graph, start, target)
 	(+more as they are added)
 
 
@@ -159,7 +160,9 @@ this function will reset the graph after calculating the needed quantities
 '''
 def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,s:int,t:int,validate_paths=True,verbose=False,**kwargs):
 	paths = []
-	if vd_path_alg == 'TN-v2':
+	if vd_path_alg == 'only-opt':
+		return True,0,0,0#basically, running just the optimal lets us skip all of this
+	elif vd_path_alg == 'TN-v2':
 		paths = G[s].count_vd_paths_to_v2(t,return_paths=True)
 	elif vd_path_alg == 'synch-v2':
 		if type(G) != List[TNNode_Stepper]:
@@ -248,6 +251,10 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 
 	return valid,len(paths),nodes_with_operations,operations_this_pair
 
+def pick_n_random_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],npairs:int):
+	#use numpy instead of trying to be too fancy
+	pairs = [(s,t) for s in range(len(G)) for t in range(s,len(G)) if (G[t] not in G[s].neighbors) and (s != t)]
+	return [pairs[i] for i in np.random.choice(list(range(len(pairs))),size=npairs,replace=False)]
 
 '''
 As with run_single_pair, but this runs many and calculates summary stats for the metrics
@@ -257,33 +264,31 @@ if sample_proportion is less than 1, we will randomly sample among the possible 
 if progress interval is set at 0, no progress is printed, else progress wil be printed every <progress_interval> pairs
 
 returns (mapping from metric string to tuple of mean and stdev)
-	proportion of total paths found mean and standard deviation
+	number of total paths found mean and standard deviation
+	maximum possible paths found mean and stdev
 	number of nodes used mean and standard deviation <approximate for centralized algorithms>
-	proportion of network usage compared to optimal (max-flow) mean and standard deviation <only if "compare_to_opt" is true>
+	optimal network usage (number of nodes) mean and standard deviation <only if "compare_to_opt" is true>
 	messages sent per node (among those that send messages) mean and standard deviation <only for decentralized algorithms>
 '''
 def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,sample_pair_proportion=1.,seed=None,max_npairs=float('inf'),progress_interval=0,compare_to_optimal=False,**kwargs):
 	np.random.seed(seed)
 	### SUMMARY STATS WILL BE CALCULATED ON THESE
-	prop_paths_found_agg = []
+	num_paths_found_agg = []
+	num_opt_paths_agg = []
 	num_nodes_used_agg = []
 	optimal_usage_agg = []
 	messages_sent_per_node_used_agg = []
 	###
 
 	#how many pairs could we do?
-	pairs_possible = []
-	npairs = 0
-	for s in range(len(G)):
-		for t in range(s+1,len(G)):
-			if G[t] not in G[s].neighbors:
-				pairs_possible.append((s,t))
+	num_edges = int(sum([len(u.neighbors) for u in G]) / 2)
+	num_pairs_possible = int((len(G) * (len(G) - 1))/2) - num_edges #|V Ux V| - |E| = number of non-edge pairs in the graph (Ux is unordered cartesian product (size is half of (|V x V| - |V|), which will always be an even number) without self-pairs)
 
 	#how many will we do?
-	npairs = int(min(max_npairs,float(len(pairs_possible)) * sample_pair_proportion))
+	npairs = int(min(max_npairs,float(num_pairs_possible) * sample_pair_proportion))
 
 	#what will the pairs be?
-	pairs = [pairs_possible[i] for i in np.random.choice(list(range(len(pairs_possible))),size=npairs,replace=False)]
+	pairs = pick_n_random_pairs(G,npairs)
 
 	#do the pairs
 	pairs_run = 0
@@ -303,9 +308,11 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 
 		#get the numbers for this pair
 		success,num_paths_found,num_nodes_used,num_messages_sent = run_single_pair(G,vd_path_alg,s,t,**kwargs)
+		#TODO do something with the success variable or get rid of it
 
 		#throw them in the aggregators
-		prop_paths_found_agg.append(float(num_paths_found)/float(exact_total_paths))
+		num_paths_found_agg.append(num_paths_found)
+		num_opt_paths_agg.append(exact_total_paths)
 		num_nodes_used_agg.append(num_nodes_used)
 		if compare_to_optimal:
 			optimal_usage_agg.append(opt_num_nodes)
@@ -315,21 +322,29 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		pairs_run += 1
 
 	#calculate summary stats
-	prop_paths_found_mean = np.mean(prop_paths_found_agg)
-	prop_paths_found_stdev = np.std(prop_paths_found_agg,ddof=1)
+	num_paths_found_mean = np.mean(num_paths_found_agg)
+	num_paths_found_stdev = np.std(num_paths_found_agg,ddof=1)
+	num_opt_paths_mean = np.mean(num_opt_paths_agg)
+	num_opt_paths_stdev = np.std(num_opt_paths_agg,ddof=1)
 	num_nodes_used_mean = np.mean(num_nodes_used_agg)
 	num_nodes_used_stdev = np.std(num_nodes_used_agg,ddof=1)
-	ret = {'prop_paths_found':(prop_paths_found_mean,prop_paths_found_stdev),
-		   'num_nodes_used':(num_nodes_used_mean,num_nodes_used_stdev)
+	ret = {'num_paths_found_mean':num_paths_found_mean,
+		   'num_paths_found_stdev':num_paths_found_stdev,
+		   'num_opt_paths_mean':num_opt_paths_mean,
+		   'num_opt_paths_stdev':num_opt_paths_stdev,
+		   'num_nodes_used_mean':num_nodes_used_mean,
+		   'num_nodes_used_stdev':num_nodes_used_stdev
 		   }
 	if compare_to_optimal:
 		optimal_usage_mean = np.mean(optimal_usage_agg)
 		optimal_usage_stdev = np.std(optimal_usage_agg,ddof=1)
-		ret.update({'optimal_usage':(optimal_usage_mean,optimal_usage_stdev)})
+		ret.update({'optimal_usage_mean':optimal_usage_mean,
+					'optimal_usage_stdev':optimal_usage_stdev})
 	if vd_path_alg not in CENTRALIZED_PATH_ALGS:
 		messages_sent_per_node_used_mean = np.mean(messages_sent_per_node_used_agg)
 		messages_sent_per_node_used_stdev = np.std(messages_sent_per_node_used_agg,ddof = 1)
-		ret.update({'messages_sent_per_node_used':(messages_sent_per_node_used_mean,messages_sent_per_node_used_stdev)})
+		ret.update({'messages_sent_per_node_used_mean':messages_sent_per_node_used_mean,
+					'messages_sent_per_node_used_stdev':messages_sent_per_node_used_stdev})
 
 	return npairs,ret
 
@@ -390,7 +405,7 @@ def generate_graph_sizes(num_sizes:int,min_size,max_size,num_repeat:int):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Experiment runner for VD path algorithm comparison")
-	parser.add_argument('-a','--path_algorithm',nargs=1,type=str,choices=ALL_PATH_ALGS,default=[DECENTRALIZED_PATH_ALGS[0]],help='Which algorithm will be used to calculate VD paths between s and t.')
+	parser.add_argument('-a','--path_algorithm',nargs=1,type=str,choices=ALL_PATH_ALGS,default=['only-opt'],help='Which algorithm will be used to calculate VD paths between s and t.')
 	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
 	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=[0.5],help="First graph generator argument (for ER graphs, this is p, for directeds it's approximate reciprocity)")
 	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
@@ -401,7 +416,7 @@ if __name__ == '__main__':
 	parser.add_argument('-m','--max_npairs',nargs=1,type=float,default=[float('inf')],help='What is the maximum number of pairs to test for a given graph?')
 	parser.add_argument('-S','--no_show_graph_progress',default=False,action='store_true',help='Should we not show progress at the graph-testing level? (by default, we will)')
 	parser.add_argument('-i','--pair_progress_interval',nargs=1,type=int,default=[0],help="How often [after how many trials] should we show progress at the pair level? (default is zero; i.e. we dont' show progress at all)")
-	parser.add_argument('-c','--compare_to_optimal',default=False,action='store_true',help='Should we calculate the optimal network usage and return a comparison between the algorithm\'s usage and that?')
+	parser.add_argument('-c','--optimal_usage',default=False,action='store_true',help='Should we calculate the optimal network usage?')
 	parser.add_argument('-C','--validate_paths',default=False,action='store_true',help="Should we validate at every step that the paths returned are VD and correct?")
 	parser.add_argument('-M','--max_paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
 	parser.add_argument('-x','--max_dist_scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
@@ -431,7 +446,7 @@ if __name__ == '__main__':
 	#end
 	#single pair args begin
 	sp_progress = args.pair_progress_interval[0]
-	compare_to_optimal = args.compare_to_optimal
+	compare_to_optimal = args.optimal_usage
 	validate_paths = args.validate_paths
 	output = args.output
 	if output is not None:
@@ -509,11 +524,15 @@ if __name__ == '__main__':
 			# print the results
 			out.write('graph_size,npairs')
 			# static metric ordering
-			ordering = ['prop_paths_found','num_nodes_used','optimal_usage','messages_sent_per_node_used']
+			ordering = ['num_paths_found_mean','num_paths_found_stdev',
+						'num_opt_paths_mean','num_opt_paths_stdev',
+						'num_nodes_used_mean','num_nodes_used_stdev',
+						'optimal_usage_mean','optimal_usage_stdev',
+						'messages_sent_per_node_used_mean','messages_sent_per_node_used_stdev']
 			# print description first
 			for metric in ordering:
 				if metric in results[0][2]:
-					out.write(',{}_mean,{}_stdev'.format(metric,metric))
+					out.write(',{}'.format(metric))
 			out.write('\n')
 
 			# then print values
@@ -522,7 +541,7 @@ if __name__ == '__main__':
 				out.write(',{}'.format(npairs))
 				for metric in ordering:
 					if metric in res_dict:
-						out.write(',{},{}'.format(*res_dict[metric]))
+						out.write(',{}'.format(res_dict[metric]))
 				out.write('\n')
 
 		print('################################################## DONE ####################################################')

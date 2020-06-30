@@ -5,8 +5,14 @@ from TN import *
 
 Orthogonal question: when to stop trying paths
 - when you can't find any more? Seems to use too many nodes
-- when there is a single failure? Seems too few?
+- when there is a single failure? Seems to work, but still uses too many nodes
 - maybe s tries each neighbor once, then stops.
+
+
+
+Optimal performance looks not-so-good at this point. We may be able to fix it a bit using a (semifudgy) solution:
+	Each node maintains a local view of the network out to k hops
+	When a node receives a request to route a message to t, it runs some kind of more well-informed algorithm (how do local max-flows translate to s-t paths?), then sends the packet (along with its recommendations?) to some neighbor
 """
 
 '''
@@ -19,7 +25,6 @@ def hyper_dist(a:complex,b:complex):
 convert a succinct address (in-person sharing) to coordinates by running the generators forward
 '''
 def addr_to_coords_v0(q,addr):
-	#TODO is there a more succinct way to do this? With 1000 nodes and q=30 we're getting >64bit addresses
 	dummy = HyperNode(-1,q)
 	dummy.init_as_root()
 	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
