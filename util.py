@@ -126,6 +126,31 @@ def retrace_single_path(pred,current,path=None) -> list:
 	else:
 		return retrace_single_path(pred,pred[current],[current] + path)
 
+
+'''
+Calculate a (networkx) graph which is the union of all of these paths (which are just lists of things [anything hashable will do]). Assumes edges are undirected
+'''
+def path_union(paths:list) -> nx.Graph:
+	G = nx.Graph()
+
+	for path in paths:
+		prev_node = path[0]
+		for node in path[1:]:
+			G.add_edge(prev_node,node)
+			prev_node = node
+
+	return G
+
+'''
+Given a list of lists of things (list of paths), find the maximum VD paths through the graph defined by those paths
+'''
+def vd_paths_from_candidates(paths:list,s,t) -> list:
+	#first compute the path union
+	U = path_union(paths)
+	#then run the maxflow based (centralized) VD algorithm on that
+	paths = vertex_disjoint_paths(U,s,t,retrace=True)
+	return paths
+
 '''
 Compresses a hex string representation of some integer down by indicating repeated digits (mostly useful for human-readability)
 '''
@@ -174,6 +199,11 @@ def str_decompress(x:str) -> str:
 		repeat = int(rnum,16)-1
 
 	return r + (r[-1] * repeat)
+
+"""
+GRAPH GENERATORS
+"""
+
 
 '''
 networkx-ized version of the older proprietary methods
@@ -239,27 +269,48 @@ def generate_connected_ER_graph(num_nodes:int,avg_degree_approx:float,seed=None)
 
 	return G
 
+'''
+Number of nodes is only approximate -- the real number is the nearest num_nodes st num_nodes = n^2 - n + 3 for some integer n
 
+guaranteed to have ceil(n/2) vd paths between s and t
 '''
-Calculate a (networkx) graph which is the union of all of these paths (which are just lists of things [anything hashable will do]). Assumes edges are undirected
-'''
-def path_union(paths:list) -> nx.Graph:
+def generate_nbad_unioning(num_nodes:int):
+	#first find the nearest n
+	n = int(np.round((np.sqrt(4*num_nodes - 11) + 1)/2))
+	#initialize the graph
 	G = nx.Graph()
+	G.add_nodes_from(['s','t'])
+	#now construct all of the paths in a rudimentary way between s and t
+	for i in range(n):
+		prev_node = 's'
+		for j in range(n + i - 1):
+			G.add_edge(prev_node,(i,j))
+			prev_node = (i,j)
+		if i != n-1:
+			G.add_edge(prev_node,'t')
+		else:
+			G.add_edges_from([(prev_node,(i,n+i-2)),((i,n+i-2),(i,n+i-1)),((i,n+i-1),'t')])#dummy node at the end
 
-	for path in paths:
-		prev_node = path[0]
-		for node in path[1:]:
-			G.add_edge(prev_node,node)
-			prev_node = node
+	#now construct the merge table
+	M = [[() for _ in range(n + i - 1)] for i in range(n)]
+	#now fill in the merge table
+	#start with base cases
+	for i in range(n-1):
+		M[0][i] = (i+1,i+1)
+		M[i+1][i+1] = (0,i)
+		#merge these
+		G = nx.contracted_nodes(G,(0,i),(i+1,i+1),self_loops=False)
+	ip,jp = (2,3)
+	for i in range(1,n-1):
+		for j in range(i+1,n+i-1):
+			if len(M[i][j]) == 0:
+				M[i][j] = (ip,jp)
+				M[ip][jp] = (i,j)
+				#do the merge now
+				G = nx.contracted_nodes(G,(i,j),(ip,jp),self_loops=False)
+				ip += 1
+				jp += 1
+		ip = i + 2
+		jp = 2*(i+2) - 1
 
 	return G
-
-'''
-Given a list of lists of things (list of paths), find the maximum VD paths through the graph defined by those paths
-'''
-def vd_paths_from_candidates(paths:list,s,t) -> list:
-	#first compute the path union
-	U = path_union(paths)
-	#then run the maxflow based (centralized) VD algorithm on that
-	paths = vertex_disjoint_paths(U,s,t,retrace=True)
-	return paths

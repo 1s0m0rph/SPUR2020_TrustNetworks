@@ -381,7 +381,7 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,s
 		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],generator_args,generator_kwargs,node_args,node_kwargs)
 		generator_args = generator_args[1:]#remove this size so that the next size calls the generator correctly
 		npairs_this_graph, result_this_graph = run_many_pairs(G,vd_path_alg,**runner_kwargs)
-		results.append([size,npairs_this_graph,result_this_graph])
+		results.append([len(G),npairs_this_graph,result_this_graph])
 		if show_progress:
 			print('Finished graph {} of {} ({:.1f}% done)'.format(ndone + 1,len(graph_sizes),100. * float(ndone) / float(len(graph_sizes))))
 			print(results[-1])

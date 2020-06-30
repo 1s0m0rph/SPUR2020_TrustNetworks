@@ -89,3 +89,25 @@ class TestGenerate_connected_ER_graph(TestCase):
 		expected_num = 2
 		actual_num = len(vd_paths_from_candidates(paths,0,4))
 		assert(expected_num == actual_num)
+
+	def test_generate_nbad_unioning(self):
+		n = 11
+		num_nodes = int(n**2 - n + 3)
+		G = generate_nbad_unioning(num_nodes)
+
+		assert(len(G) == num_nodes)
+
+		#should have ceil(n/2) paths
+		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
+		assert(npaths == int(np.ceil(n/2)))
+
+		#also for even n
+		n = 12
+		num_nodes = int(n**2 - n + 3)
+		G = generate_nbad_unioning(num_nodes)
+
+		assert(len(G) == num_nodes)
+
+		#should have ceil(n/2) paths
+		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
+		assert(npaths == int(np.ceil(n/2)))
