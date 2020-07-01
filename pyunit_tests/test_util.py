@@ -5,11 +5,11 @@ from util import *
 class TestGenerate_connected_ER_graph(TestCase):
 	def test_generate_connected_ER_graph(self):
 		#first check that a high-p graph is just connected end of story
-		a = generate_connected_ER_graph(100,0.7,seed=0)
+		a = generate_connected_ER_graph(100,10,seed=0)
 		assert(nx.is_connected(a))#regression test
 
 		#now check that it successfully connects a graph that is almost surely not connected
-		a = generate_connected_ER_graph(100,0.01,seed=0)
+		a = generate_connected_ER_graph(100,0.9,seed=0)
 		assert(nx.is_connected(a))
 
 	def test_vertex_disjoint_transform(self):
@@ -29,7 +29,7 @@ class TestGenerate_connected_ER_graph(TestCase):
 		assert(npaths == 1)
 
 		#large random graph for retracing (tests subfunctions as well as this one)
-		G = generate_connected_ER_graph(100,0.3,0)
+		G = generate_connected_ER_graph(100,5,0)
 		#random start, random (non-neighbor) end
 		s = np.random.choice(list(G.nodes))
 		t = np.random.choice(list(set(G.nodes) - set(G.neighbors(s))))
@@ -111,3 +111,17 @@ class TestGenerate_connected_ER_graph(TestCase):
 		#should have ceil(n/2) paths
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
 		assert(npaths == int(np.ceil(n/2)))
+
+	def test_generate_connected_variable_dense_ER_graph(self):
+		#semidense log should have degree ~= 9.2
+		a = generate_connected_variable_dense_ER_graph(100,'log',2,seed=1)
+		assert(nx.is_connected(a))
+		avg_deg = np.mean([a.degree[i] for i in a])
+		exp_avg_degree = np.log(100)*2
+		tolerance = 1e-1
+		assert(exp_avg_degree - tolerance < avg_deg)
+		assert(exp_avg_degree + tolerance > avg_deg)
+
+		# now check that it successfully connects a graph that is almost surely not connected
+		a = generate_connected_ER_graph(100,0.01,seed=0)
+		assert (nx.is_connected(a))

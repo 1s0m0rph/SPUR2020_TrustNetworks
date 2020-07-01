@@ -251,23 +251,54 @@ def generate_connected_rand_graph_from_deg_dist(num_nodes:int,approx_reciprocity
 Generate a connected, undirected erdos-renyi random graph. Connect the graph by fudging vertices that aren't in the largest CC
 '''
 def generate_connected_ER_graph(num_nodes:int,avg_degree_approx:float,seed=None) -> nx.Graph:
-	approx_p = avg_degree_approx / (2*(num_nodes - 1))#from that kh = 2*|E|/|V| and Ex[|E|] = n*(n-1)*p
+	approx_p = avg_degree_approx / (num_nodes - 1)#from that kh = (2*|E|)/|V| and Ex[|E|] = (n*(n-1)/2)*p
 	G = nx.generators.fast_gnp_random_graph(num_nodes,approx_p,seed=seed)
 	np.random.seed(seed)
 	#find the largest connected component (or rather, which nodes are not in it)
-	ccs = [set(x) for x in sorted(nx.connected_components(G),key=len,reverse=False)]#biggest last
+	ccs = [list(x) for x in sorted(nx.connected_components(G),key=len,reverse=False)]#biggest last
 
 	#randomly connect using as few edges as possible all of these other ccs
-	list_largest_cc = list(ccs[-1])
+	list_largest_cc = ccs[-1]
 	for cc in ccs[:-1]:
 		#pick a random node to connect to the main cc
-		node_i = np.random.choice(list(cc))
+		node_i = np.random.choice(cc)
 		#pick a random node to connect this node to within the main cc
 		node_j = np.random.choice(list_largest_cc)
 		#connect them -- this cc is now a part of the main one
 		G.add_edge(node_i,node_j)
 
 	return G
+
+
+'''
+variable-dense graph: 
+	kh = s*f(|V|) for constant scale s, kh = Theta(f(|V|), |E| = Theta(|V| f(|V|))
+
+e.g. if f(x) = log x, then |E| = Theta(|V| log |V|)
+
+function types:
+	<any function from float to float>
+	'log': ln x
+	'sqrt': sqrt x
+	'dense': x (standard dense graph)
+	'sparse': 1 (standard sparse graph)
+'''
+def generate_connected_variable_dense_ER_graph(num_nodes:int,ftype:str,scale,seed=None) -> nx.Graph:
+	f = None
+	if ftype == 'log':
+		f = np.log
+	elif ftype == 'sqrt':
+		f = np.sqrt
+	elif ftype == 'dense':
+		f = lambda x: x
+	elif ftype == 'sparse':
+		f = lambda x: 1.
+	else:
+		raise AttributeError("Unknown density function type: {}".format(ftype))
+
+	avg_deg = scale * f(num_nodes)
+	return generate_connected_ER_graph(num_nodes,avg_deg,seed=seed)
+
 
 '''
 Number of nodes is only approximate -- the real number is the nearest num_nodes st num_nodes = n^2 - n + 3 for some integer n

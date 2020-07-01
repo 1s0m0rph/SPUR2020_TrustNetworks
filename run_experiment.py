@@ -351,15 +351,13 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 
 	return npairs,ret
 
-GRAPH_TYPES = ['con-er',#connected erdos renyi
-			   'pnas-sn',#pnas social network
-			   #ADD OTHERS HERE
-			   ]
-
-GRAPH_FNS = {'con-er':generate_connected_ER_graph,
-			 'pnas-sn':generate_connected_rand_graph_from_deg_dist,
+GRAPH_FNS = {'con-er':generate_connected_ER_graph,#connected erdos renyi
+			 'pnas-sn':generate_connected_rand_graph_from_deg_dist,#pnas social network
+			 'con-er-var':generate_connected_variable_dense_ER_graph,#connected erdos renyi -- variable density
 			 #add map from graph type string onto the actual generating function here
 			 }
+
+GRAPH_TYPES = list(GRAPH_FNS.keys())
 
 '''
 Using the same graph generation algorithm, calculate all the numbers we want for many different sizes of graphs
@@ -411,6 +409,8 @@ if __name__ == '__main__':
 	parser.add_argument('-a','--path_algorithm',nargs=1,type=str,choices=ALL_PATH_ALGS,default=['only-opt'],help='Which algorithm will be used to calculate VD paths between s and t.')
 	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
 	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=[1],help="First graph generator argument (for ER graphs, this is the average degree, for directeds it's approximate reciprocity)")
+	parser.add_argument('-1','--graph_arg_1',nargs=1,type=str,default=['sparse'],help="Second graph generator argument (for variable density, this is the name of the function (see util::generate_connected_variable_dense_ER_graph))")
+	parser.add_argument('-2','--graph_arg_2',nargs=1,type=float,default=[1],help="Third graph generator argument (for variable density, this is the scale)")
 	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
 	parser.add_argument('-l','--min_graph_size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
 	parser.add_argument('-b','--max_graph_size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
@@ -439,6 +439,8 @@ if __name__ == '__main__':
 	#graph generator args begin
 	generator = GRAPH_FNS[args.graph_type[0]]
 	graph_generator_arguments = [args.graph_arg_0[0],
+								 args.graph_arg_1[0],
+								 args.graph_arg_2[0],
 								 #add others here and in the parser (-1, -2, ...)
 								 ]
 	#end

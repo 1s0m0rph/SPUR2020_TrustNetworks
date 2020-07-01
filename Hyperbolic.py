@@ -13,6 +13,11 @@ Orthogonal question: when to stop trying paths
 Optimal performance looks not-so-good at this point. We may be able to fix it a bit using a (semifudgy) solution:
 	Each node maintains a local view of the network out to k hops
 	When a node receives a request to route a message to t, it runs some kind of more well-informed algorithm (how do local max-flows translate to s-t paths?), then sends the packet (along with its recommendations?) to some neighbor
+	
+
+dense networks seem to work better (as long as we're not looking for all the edges) what about semidense networks (kh = log n or sqrt(n) or something)?
+
+Packets sent between s and t represent keyshares. Should we add an edge between s and t if they successfully communicate? Under what extra conditions (e.g. number of agreeing paths)?
 """
 
 '''
