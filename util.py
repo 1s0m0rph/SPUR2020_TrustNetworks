@@ -200,6 +200,7 @@ def str_decompress(x:str) -> str:
 
 	return r + (r[-1] * repeat)
 
+
 """
 GRAPH GENERATORS
 """
@@ -283,7 +284,7 @@ function types:
 	'dense': x (standard dense graph)
 	'sparse': 1 (standard sparse graph)
 '''
-def generate_connected_variable_dense_ER_graph(num_nodes:int,ftype:str,scale,seed=None) -> nx.Graph:
+def generate_connected_variable_dense_ER_graph(num_nodes:int,scale:float,ftype:str,seed=None) -> nx.Graph:
 	f = None
 	if ftype == 'log':
 		f = np.log

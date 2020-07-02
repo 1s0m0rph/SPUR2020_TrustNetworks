@@ -114,14 +114,10 @@ class TestGenerate_connected_ER_graph(TestCase):
 
 	def test_generate_connected_variable_dense_ER_graph(self):
 		#semidense log should have degree ~= 9.2
-		a = generate_connected_variable_dense_ER_graph(100,'log',2,seed=1)
+		a = generate_connected_variable_dense_ER_graph(100,2,'log',seed=1)
 		assert(nx.is_connected(a))
 		avg_deg = np.mean([a.degree[i] for i in a])
 		exp_avg_degree = np.log(100)*2
 		tolerance = 1e-1
 		assert(exp_avg_degree - tolerance < avg_deg)
 		assert(exp_avg_degree + tolerance > avg_deg)
-
-		# now check that it successfully connects a graph that is almost surely not connected
-		a = generate_connected_ER_graph(100,0.01,seed=0)
-		assert (nx.is_connected(a))
