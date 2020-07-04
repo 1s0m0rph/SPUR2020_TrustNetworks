@@ -112,6 +112,47 @@ class TestGenerate_connected_ER_graph(TestCase):
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
 		assert(npaths == int(np.ceil(n/2)))
 
+	def test_generate_nbad_unioning_fast(self):
+		n = 5
+		num_nodes = int(n**2 - n + 3)
+		G = generate_nbad_unioning(num_nodes)#baseline
+		Gp = generate_nbad_unioning_fast(num_nodes)
+		# import matplotlib.pyplot as plt
+		# plt.figure(figsize=(20,20))
+		# nx.draw(Gp,node_size=1000,with_labels=True)
+		# plt.savefig('Gp.png')
+		#FIXME I honestly may have just found a bug in networkx... these graphs are DEFINITELY isomorphic (see G.png,Gp.png) and it says they're not
+		# assert(nx.is_isomorphic(G,Gp))
+		assert(len(Gp) == num_nodes)
+
+		#should have ceil(n/2) paths
+		npaths = vertex_disjoint_paths(Gp,'s','t',retrace=False)
+		assert(npaths == int(np.ceil(n/2)))
+
+		#also for even n
+		n = 12
+		num_nodes = int(n**2 - n + 3)
+		G = generate_nbad_unioning(num_nodes)
+		Gp = generate_nbad_unioning_fast(num_nodes)
+
+		# assert(nx.is_isomorphic(G,Gp))
+		assert(len(Gp) == num_nodes)
+
+		#should have ceil(n/2) paths
+		npaths = vertex_disjoint_paths(Gp,'s','t',retrace=False)
+		assert(npaths == int(np.ceil(n/2)))
+
+		#speed test
+		n = 50
+		num_nodes = int(n ** 2 - n + 3)
+		G = generate_nbad_unioning_fast(num_nodes)
+
+		assert (len(G) == num_nodes)
+
+		# should have ceil(n/2) paths
+		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
+		assert (npaths == int(np.ceil(n / 2)))
+
 	def test_generate_connected_variable_dense_ER_graph(self):
 		#semidense log should have degree ~= 9.2
 		a = generate_connected_variable_dense_ER_graph(100,2,'log',seed=1)

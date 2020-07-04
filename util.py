@@ -300,6 +300,54 @@ def generate_connected_variable_dense_ER_graph(num_nodes:int,scale:float,ftype:s
 	avg_deg = scale * f(num_nodes)
 	return generate_connected_ER_graph(num_nodes,avg_deg,seed=seed)
 
+def generate_nbad_unioning_fast(num_nodes:int):
+	# first find the nearest n
+	n = int(np.round((np.sqrt(4 * num_nodes - 11) + 1) / 2))
+	# initialize the graph
+	G = nx.Graph()
+	G.add_nodes_from(['s','t'])
+	#start by making the zeroth (s-t) path
+	prev_node = 's'
+	for node_idx in range(n-1):
+		G.add_edge(prev_node,(0,node_idx))
+		prev_node = (0,node_idx)
+	G.add_edge(prev_node,'t')
+
+	path_max_intersected = [(2*i)-1 for i in range(n-1)]#what is the maximum index this path has had to intersect with another at?
+
+	for path_num in range(1,n):
+		#make the ith path
+		num_nodes_in_path = n + path_num - (1 if path_num != (n-1) else 0) #not necessarily the number of nodes that will be added
+		prev_node = 's'
+		current_node_idx = 0
+		#make the dummy nodes
+		num_dummies = path_num
+		for _ in range(num_dummies):
+			this_node = (path_num,current_node_idx)
+			G.add_edge(prev_node,this_node)
+			prev_node = this_node
+			current_node_idx += 1
+
+		#connect up all of our intersections starting from path 0, node i-1 (total intersections = i)
+		intersections_to_make = path_num
+		for with_path in range(intersections_to_make):
+			#intersect this path at node given by the max_intersected array
+			path_max_intersected[with_path] += 1
+			intersect_with_at = (with_path,path_max_intersected[with_path])
+			G.add_edge(prev_node,intersect_with_at)
+			prev_node = intersect_with_at
+
+		#straight on til morning
+		next_node = (path_num,num_dummies+intersections_to_make)
+		for _ in range(num_nodes_in_path - (num_dummies + intersections_to_make)):
+			G.add_edge(prev_node,next_node)
+			prev_node = next_node
+			next_node = (path_num,next_node[1]+1)
+
+		#final edge goes to t
+		G.add_edge(prev_node,'t')
+
+	return G
 
 '''
 Number of nodes is only approximate -- the real number is the nearest num_nodes st num_nodes = n^2 - n + 3 for some integer n
