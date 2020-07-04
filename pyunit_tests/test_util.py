@@ -1,6 +1,6 @@
 from unittest import TestCase
+# from run_experiment import *
 from util import *
-
 
 class TestGenerate_connected_ER_graph(TestCase):
 	def test_generate_connected_ER_graph(self):
@@ -168,12 +168,16 @@ class TestGenerate_connected_ER_graph(TestCase):
 		n = 15
 		num_nodes = 5 + 6*(n-1)
 		G = generate_nbad_multibl(num_nodes)
+		# tng = convert_nx_graph_to_TN(G,HyperNode,3)
 
 		assert(len(G) == num_nodes)
 
 		#should have n paths
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
 		assert(npaths == n)
+
+		# paths_ret = tng[0].count_vd_paths_to_hyper_multibl(tng[1].coords)#doesn't actually work on this because this implementation doesn't find the shortest path (we'd need to enforce some particular embedding in order to make it work correctly)
+		# assert(len(paths_ret) == 1)
 
 		#also for even n
 		n = 20
