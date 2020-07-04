@@ -313,7 +313,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 			exact_paths = vertex_disjoint_paths(nxG,s,t,retrace=True)
 			if validate_paths:
 				validate_returned_paths(G,exact_paths,s,t,verbose=True)
-			opt_num_nodes = sum([len(path) for path in exact_paths])
+			opt_num_nodes = sum([len(path)-1 for path in exact_paths]) + 1#don't count t for all of these -- just count it once
 			exact_total_paths = len(exact_paths)
 		else:
 			exact_total_paths = vertex_disjoint_paths(nxG,s,t,retrace=False)
