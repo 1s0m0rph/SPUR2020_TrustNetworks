@@ -391,6 +391,11 @@ def generate_nbad_unioning(num_nodes:int):
 		ip = i + 2
 		jp = 2*(i+2) - 1
 
+	#remove self-loops since for some reason contracted nodes doesn't always fail to add them
+	for node in G:
+		if G.has_edge(node,node):
+			G.remove_edge(node,node)
+
 	return G
 
 '''

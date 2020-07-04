@@ -91,15 +91,19 @@ class TestUtils(TestCase):
 		assert(expected_num == actual_num)
 
 	def test_generate_nbad_unioning(self):
-		n = 11
+		n = 5
 		num_nodes = int(n**2 - n + 3)
 		G = generate_nbad_unioning(num_nodes)
 
 		assert(len(G) == num_nodes)
+		#make sure there are no self-loops
+		for node in G.nodes:
+			assert(not G.has_edge(node,node))
 
 		#should have ceil(n/2) paths
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
 		assert(npaths == int(np.ceil(n/2)))
+
 
 		#also for even n
 		n = 12
@@ -107,6 +111,9 @@ class TestUtils(TestCase):
 		G = generate_nbad_unioning(num_nodes)
 
 		assert(len(G) == num_nodes)
+		# make sure there are no self-loops
+		for node in G.nodes:
+			assert (not G.has_edge(node,node))
 
 		#should have ceil(n/2) paths
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
@@ -117,17 +124,16 @@ class TestUtils(TestCase):
 		num_nodes = int(n**2 - n + 3)
 		G = generate_nbad_unioning(num_nodes)#baseline
 		Gp = generate_nbad_unioning_fast(num_nodes)
-		# import matplotlib.pyplot as plt
-		# plt.figure(figsize=(20,20))
-		# nx.draw(Gp,node_size=1000,with_labels=True)
-		# plt.savefig('Gp.png')
-		#FIXME I honestly may have just found a bug in networkx... these graphs are DEFINITELY isomorphic (see G.png,Gp.png) and it says they're not
-		# assert(nx.is_isomorphic(G,Gp))
+
+		assert(nx.is_isomorphic(G,Gp))
 		assert(len(Gp) == num_nodes)
 
 		#should have ceil(n/2) paths
 		npaths = vertex_disjoint_paths(Gp,'s','t',retrace=False)
 		assert(npaths == int(np.ceil(n/2)))
+		# make sure there are no self-loops
+		for node in Gp.nodes:
+			assert (not Gp.has_edge(node,node))
 
 		#also for even n
 		n = 12
@@ -135,12 +141,15 @@ class TestUtils(TestCase):
 		G = generate_nbad_unioning(num_nodes)
 		Gp = generate_nbad_unioning_fast(num_nodes)
 
-		# assert(nx.is_isomorphic(G,Gp))
+		assert(nx.is_isomorphic(G,Gp))
 		assert(len(Gp) == num_nodes)
 
 		#should have ceil(n/2) paths
 		npaths = vertex_disjoint_paths(Gp,'s','t',retrace=False)
 		assert(npaths == int(np.ceil(n/2)))
+		# make sure there are no self-loops
+		for node in Gp.nodes:
+			assert (not Gp.has_edge(node,node))
 
 		#speed test
 		n = 50
@@ -152,6 +161,9 @@ class TestUtils(TestCase):
 		# should have ceil(n/2) paths
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
 		assert (npaths == int(np.ceil(n / 2)))
+		# make sure there are no self-loops
+		for node in G.nodes:
+			assert (not G.has_edge(node,node))
 
 	def test_generate_connected_variable_dense_ER_graph(self):
 		#semidense log should have degree ~= 9.2
