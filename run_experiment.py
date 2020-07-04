@@ -131,6 +131,43 @@ PATH_ALGS_NODE_TYPE.update({x:TNNode_Stepper for x in SYNCHRONIZED_PATH_ALGS})
 PATH_ALGS_NODE_TYPE.update({x:HyperNode for x in HYPER_EMBED_PATH_ALGS})
 
 '''
+helper function for later things -- just pulling the code out of a later function here
+'''
+def validate_returned_paths(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],paths:List[List[Union[int,TNNode,HyperNode,TNNode_Stepper]]],s:int,t:int,verbose=False):
+	valid = True
+	nodes_seen = set()
+	for path in paths:
+		prev_node = G[s]
+		for node in path:
+			# verify that paths exist
+			if type(node) == int:
+				node = G[node]
+			if node not in prev_node.neighbors:
+				valid = False
+				if verbose:
+					print('EDGE DOES NOT EXIST: ({},{})'.format(prev_node.id,node.id))
+				else:
+					break  # if we're printing everything we want to really pring EVERYTHING
+			prev_node = node
+			# verify that paths are disjoint
+			if (node.id != s) and (node.id != t) and (node.id in nodes_seen):
+				valid = False
+				if verbose:
+					print('REPEATED NODE ID: {}'.format(node.id))
+				else:
+					break  # if we're printing everything we want to really pring EVERYTHING
+			else:
+				nodes_seen.add(node.id)
+		if prev_node.id != t:
+			valid = False
+			if verbose:
+				print('DESTINATION NOT REACHED (FINAL NODE IS {}, t = {})'.format(prev_node,G[t]))
+
+		if (not valid) and (not verbose):
+			break
+	return valid
+
+'''
 Run vd_path_alg on G from s to t
 
 path alg possibilities:
@@ -210,34 +247,7 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 	valid = True
 	if validate_paths:
 		#make sure the paths are correct
-		nodes_seen = set()
-		for path in paths:
-			prev_node = G[s]
-			for node in path:
-				# verify that paths exist
-				if node not in prev_node.neighbors:
-					valid = False
-					if verbose:
-						print('EDGE DOES NOT EXIST: ({},{})'.format(prev_node.id,node.id))
-					else:
-						break#if we're printing everything we want to really pring EVERYTHING
-				prev_node = node
-				# verify that paths are disjoint
-				if (node.id != s) and (node.id != t) and (node.id in nodes_seen):
-					valid = False
-					if verbose:
-						print('REPEATED NODE ID: {}'.format(node.id))
-					else:
-						break#if we're printing everything we want to really pring EVERYTHING
-				else:
-					nodes_seen.add(node.id)
-			if prev_node.id != t:
-				valid = False
-				if verbose:
-					print('DESTINATION NOT REACHED (FINAL NODE IS {}, t = {})'.format(prev_node,G[t]))
-
-			if (not valid) and (not verbose):
-				break
+		valid = validate_returned_paths(G,paths,s,t,verbose=verbose)
 
 
 	#reset everything and tally up usage
@@ -301,6 +311,8 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		opt_num_nodes = 0
 		if compare_to_optimal:
 			exact_paths = vertex_disjoint_paths(nxG,s,t,retrace=True)
+			if validate_paths:
+				validate_returned_paths(G,exact_paths,s,t,verbose=True)
 			opt_num_nodes = sum([len(path) for path in exact_paths])
 			exact_total_paths = len(exact_paths)
 		else:
