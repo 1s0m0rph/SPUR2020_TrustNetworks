@@ -346,3 +346,35 @@ def generate_nbad_unioning(num_nodes:int):
 		jp = 2*(i+2) - 1
 
 	return G
+
+'''
+n-bad example for multiblacklisting, assuming the pathfinding algorithm finds shortest paths
+
+number of nodes as a function of n: 5 + 6(n-1) [(s,t,s1,m,t1,t) + (si,pi,l1i,l2i,l3i,ti for i in 1,n)]
+so n as function of num_nodes = ((num_nodes - 5)/6) + 1
+'''
+def generate_nbad_multibl(num_nodes:int):
+	n = int(np.round(((num_nodes-5)/6)+1))
+	G = nx.Graph()
+
+	#add s and t and all s_i,t_i; connect s to all s_i and t to all t_i
+	G.add_nodes_from(['s','t'])
+	for i in range(n):
+		G.add_edges_from([('s','s_{}'.format(i)),('t','t_{}'.format(i))])
+
+	#finish path 1 (shortest)
+	G.add_edges_from([('s_0','m'),('m','t_0')])
+
+	#add all the other paths
+	for i in range(1,n):
+		si = 's_{}'.format(i)
+		ti = 't_{}'.format(i)
+		l1i = 'l1_{}'.format(i)
+		l2i = 'l2_{}'.format(i)
+		l3i = 'l3_{}'.format(i)
+		pi = 'p_{}'.format(i)
+		G.add_edges_from([(si,l1i),(l1i,l2i),(l2i,l3i),(l3i,ti),#path i [length 6]
+						  (si,pi),(pi,'m')#path p_i [length 5]
+						  ])
+
+	return G

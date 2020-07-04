@@ -121,3 +121,26 @@ class TestGenerate_connected_ER_graph(TestCase):
 		tolerance = 1e-1
 		assert(exp_avg_degree - tolerance < avg_deg)
 		assert(exp_avg_degree + tolerance > avg_deg)
+
+
+	def test_generate_nbad_multibl(self):
+		n = 15
+		num_nodes = 5 + 6*(n-1)
+		G = generate_nbad_multibl(num_nodes)
+
+		assert(len(G) == num_nodes)
+
+		#should have n paths
+		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
+		assert(npaths == n)
+
+		#also for even n
+		n = 20
+		num_nodes = 5 + 6 * (n - 1)
+		G = generate_nbad_multibl(num_nodes)
+
+		assert (len(G) == num_nodes)
+
+		# should have n paths
+		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
+		assert (npaths == n)
