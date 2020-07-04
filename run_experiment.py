@@ -324,6 +324,8 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 
 		pairs_run += 1
 
+	return npairs, num_paths_found_agg, num_opt_paths_agg, num_nodes_used_agg, optimal_usage_agg, messages_sent_per_node_used_agg
+
 	#calculate summary stats
 	num_paths_found_mean = np.mean(num_paths_found_agg)
 	num_paths_found_stdev = np.std(num_paths_found_agg,ddof=1)
@@ -350,6 +352,12 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 					'messages_sent_per_node_used_stdev':messages_sent_per_node_used_stdev})
 
 	return npairs,ret
+
+METRIC_ORDERING = ['num_paths_found_mean','num_paths_found_stdev',
+					'num_opt_paths_mean','num_opt_paths_stdev',
+					'num_nodes_used_mean','num_nodes_used_stdev',
+					'optimal_usage_mean','optimal_usage_stdev',
+					'messages_sent_per_node_used_mean','messages_sent_per_node_used_stdev']
 
 GRAPH_FNS = {'con-er':generate_connected_ER_graph,#connected erdos renyi
 			 'pnas-sn':generate_connected_rand_graph_from_deg_dist,#pnas social network
@@ -378,13 +386,63 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,s
 		generator_args = [size] + list(generator_args)#size must be dynamic, so it isn't already a part of the generator args
 		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],generator_args,generator_kwargs,node_args,node_kwargs)
 		generator_args = generator_args[1:]#remove this size so that the next size calls the generator correctly
-		npairs_this_graph, result_this_graph = run_many_pairs(G,vd_path_alg,**runner_kwargs)
-		results.append([len(G),npairs_this_graph,result_this_graph])
+		rmp_ret = run_many_pairs(G,vd_path_alg,**runner_kwargs)
+
+		results.append([len(G),*rmp_ret])
 		if show_progress:
 			print('Finished graph {} of {} ({:.1f}% done)'.format(ndone + 1,len(graph_sizes),100. * float(ndone) / float(len(graph_sizes))))
-			print(results[-1])
 
-	return results
+
+	#deduce repetition number
+	res_idx = 0
+	while results[res_idx][0] == results[0][0]:
+		res_idx += 1
+	rep = res_idx
+
+	#collect results by graph size
+	res_idx = 0
+	results_ret = []
+	for size in graph_sizes[0:len(graph_sizes):rep]:
+		#get all of the results that have this size
+		this_size_results = results[res_idx:res_idx+rep]#these are the ones to be combined
+		tmp_arr_res = [[] for _ in range(len(this_size_results[0])-2)]
+		tmp_npairs = []
+		for one_res in this_size_results:
+			for i,arr_res in enumerate(one_res):
+				if i >= 2:
+					tmp_arr_res[i-2].extend(arr_res)
+				elif i >= 1:
+					tmp_npairs.append(arr_res)
+		num_paths_found_agg,num_opt_paths_agg,num_nodes_used_agg,optimal_usage_agg,messages_sent_per_node_used_agg = tmp_arr_res
+		# calculate summary stats
+		num_paths_found_mean = np.mean(num_paths_found_agg)
+		num_paths_found_stdev = np.std(num_paths_found_agg,ddof=1)
+		num_opt_paths_mean = np.mean(num_opt_paths_agg)
+		num_opt_paths_stdev = np.std(num_opt_paths_agg,ddof=1)
+		num_nodes_used_mean = np.mean(num_nodes_used_agg)
+		num_nodes_used_stdev = np.std(num_nodes_used_agg,ddof=1)
+		tmp_res = {'num_paths_found_mean':num_paths_found_mean,
+				   'num_paths_found_stdev':num_paths_found_stdev,
+				   'num_opt_paths_mean':num_opt_paths_mean,
+				   'num_opt_paths_stdev':num_opt_paths_stdev,
+				   'num_nodes_used_mean':num_nodes_used_mean,
+				   'num_nodes_used_stdev':num_nodes_used_stdev
+				   }
+		if compare_to_optimal:
+			optimal_usage_mean = np.mean(optimal_usage_agg)
+			optimal_usage_stdev = np.std(optimal_usage_agg,ddof=1)
+			tmp_res.update({'optimal_usage_mean':optimal_usage_mean,
+						'optimal_usage_stdev':optimal_usage_stdev})
+		if vd_path_alg not in CENTRALIZED_PATH_ALGS:
+			messages_sent_per_node_used_mean = np.mean(messages_sent_per_node_used_agg)
+			messages_sent_per_node_used_stdev = np.std(messages_sent_per_node_used_agg,ddof=1)
+			tmp_res.update({'messages_sent_per_node_used_mean':messages_sent_per_node_used_mean,
+						'messages_sent_per_node_used_stdev':messages_sent_per_node_used_stdev})
+
+		results_ret.append([size,np.mean(tmp_npairs),tmp_res])
+		res_idx += rep
+
+	return results_ret
 
 """
 Given rough bounds, give me some graph sizes
@@ -507,19 +565,18 @@ if __name__ == '__main__':
 		#print the results
 		print('graph_size,npairs',end='')
 		#static metric ordering
-		ordering = ['prop_paths_found','num_nodes_used','optimal_usage','messages_sent_per_node_used']
 		#print description first
-		for metric in ordering:
+		for metric in METRIC_ORDERING:
 			if metric in results[0][2]:
-				print(',{}_mean,{}_stdev'.format(metric,metric),end='')
+				print(',{}'.format(metric,metric),end='')
 		print()
 
 		#then print values
 		for graph_size,npairs,res_dict in results:
 			print('{},{}'.format(graph_size,npairs),end='')
-			for metric in ordering:
+			for metric in METRIC_ORDERING:
 				if metric in res_dict:
-					print(',{},{}'.format(*res_dict[metric]),end='')
+					print(',{}'.format(res_dict[metric]),end='')
 			print()
 	else:
 		#output to outfile
@@ -527,13 +584,8 @@ if __name__ == '__main__':
 			# print the results
 			out.write('graph_size,npairs')
 			# static metric ordering
-			ordering = ['num_paths_found_mean','num_paths_found_stdev',
-						'num_opt_paths_mean','num_opt_paths_stdev',
-						'num_nodes_used_mean','num_nodes_used_stdev',
-						'optimal_usage_mean','optimal_usage_stdev',
-						'messages_sent_per_node_used_mean','messages_sent_per_node_used_stdev']
 			# print description first
-			for metric in ordering:
+			for metric in METRIC_ORDERING:
 				if metric in results[0][2]:
 					out.write(',{}'.format(metric))
 			out.write('\n')
@@ -542,7 +594,7 @@ if __name__ == '__main__':
 			for graph_size,npairs,res_dict in results:
 				out.write(str(graph_size))
 				out.write(',{}'.format(npairs))
-				for metric in ordering:
+				for metric in METRIC_ORDERING:
 					if metric in res_dict:
 						out.write(',{}'.format(res_dict[metric]))
 				out.write('\n')
