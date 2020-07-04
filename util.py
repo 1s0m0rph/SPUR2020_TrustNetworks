@@ -319,14 +319,12 @@ def generate_nbad_unioning_fast(num_nodes:int):
 		#make the ith path
 		num_nodes_in_path = n + path_num - (1 if path_num != (n-1) else 0) #not necessarily the number of nodes that will be added
 		prev_node = 's'
-		current_node_idx = 0
 		#make the dummy nodes
 		num_dummies = path_num
-		for _ in range(num_dummies):
-			this_node = (path_num,current_node_idx)
+		for i in range(num_dummies):
+			this_node = (path_num,i)
 			G.add_edge(prev_node,this_node)
 			prev_node = this_node
-			current_node_idx += 1
 
 		#connect up all of our intersections starting from path 0, node i-1 (total intersections = i)
 		intersections_to_make = path_num
@@ -422,7 +420,8 @@ def generate_nbad_multibl(num_nodes:int):
 		l3i = 'l3_{}'.format(i)
 		pi = 'p_{}'.format(i)
 		G.add_edges_from([(si,l1i),(l1i,l2i),(l2i,l3i),(l3i,ti),#path i [length 6]
-						  (si,pi),(pi,'m')#path p_i [length 5]
+						  (si,pi),(pi,'m'),#path p_i [length 5]
+						  ('m',ti)#the real killer
 						  ])
 
 	return G
