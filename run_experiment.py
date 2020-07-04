@@ -326,33 +326,6 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 
 	return npairs, num_paths_found_agg, num_opt_paths_agg, num_nodes_used_agg, optimal_usage_agg, messages_sent_per_node_used_agg
 
-	#calculate summary stats
-	num_paths_found_mean = np.mean(num_paths_found_agg)
-	num_paths_found_stdev = np.std(num_paths_found_agg,ddof=1)
-	num_opt_paths_mean = np.mean(num_opt_paths_agg)
-	num_opt_paths_stdev = np.std(num_opt_paths_agg,ddof=1)
-	num_nodes_used_mean = np.mean(num_nodes_used_agg)
-	num_nodes_used_stdev = np.std(num_nodes_used_agg,ddof=1)
-	ret = {'num_paths_found_mean':num_paths_found_mean,
-		   'num_paths_found_stdev':num_paths_found_stdev,
-		   'num_opt_paths_mean':num_opt_paths_mean,
-		   'num_opt_paths_stdev':num_opt_paths_stdev,
-		   'num_nodes_used_mean':num_nodes_used_mean,
-		   'num_nodes_used_stdev':num_nodes_used_stdev
-		   }
-	if compare_to_optimal:
-		optimal_usage_mean = np.mean(optimal_usage_agg)
-		optimal_usage_stdev = np.std(optimal_usage_agg,ddof=1)
-		ret.update({'optimal_usage_mean':optimal_usage_mean,
-					'optimal_usage_stdev':optimal_usage_stdev})
-	if vd_path_alg not in CENTRALIZED_PATH_ALGS:
-		messages_sent_per_node_used_mean = np.mean(messages_sent_per_node_used_agg)
-		messages_sent_per_node_used_stdev = np.std(messages_sent_per_node_used_agg,ddof = 1)
-		ret.update({'messages_sent_per_node_used_mean':messages_sent_per_node_used_mean,
-					'messages_sent_per_node_used_stdev':messages_sent_per_node_used_stdev})
-
-	return npairs,ret
-
 METRIC_ORDERING = ['num_paths_found_mean','num_paths_found_stdev',
 					'num_opt_paths_mean','num_opt_paths_stdev',
 					'num_nodes_used_mean','num_nodes_used_stdev',
