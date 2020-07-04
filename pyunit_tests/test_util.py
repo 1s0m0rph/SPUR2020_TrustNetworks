@@ -2,7 +2,7 @@ from unittest import TestCase
 # from run_experiment import *
 from util import *
 
-class TestGenerate_connected_ER_graph(TestCase):
+class TestUtils(TestCase):
 	def test_generate_connected_ER_graph(self):
 		#first check that a high-p graph is just connected end of story
 		a = generate_connected_ER_graph(100,10,seed=0)

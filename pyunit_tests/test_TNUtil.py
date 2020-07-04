@@ -13,7 +13,7 @@ def graphs_are_same(nxg:nx.Graph,tng:List[TNNode]):
 
 	return True
 
-class TestExperimentRunner(TestCase):
+class TestTNUtils(TestCase):
 	def test_convert_nx_graph_to_TN(self):
 		nxg = nx.Graph()
 		nxg.add_edges_from([[0,1],[0,2],[1,2],[2,3],[2,4],[1,4]])
