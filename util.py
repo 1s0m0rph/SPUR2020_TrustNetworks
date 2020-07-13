@@ -351,6 +351,8 @@ def generate_nbad_unioning_fast(num_nodes:int):
 Number of nodes is only approximate -- the real number is the nearest num_nodes st num_nodes = n^2 - n + 3 for some integer n
 
 guaranteed to have ceil(n/2) vd paths between s and t
+
+interesting note: these graphs appear to always be planar
 '''
 def generate_nbad_unioning(num_nodes:int):
 	#first find the nearest n
@@ -405,7 +407,7 @@ number of nodes as a function of n: 5 + 6(n-1) [(s,t,s1,m,t1,t) + (si,pi,l1i,l2i
 so n as function of num_nodes = ((num_nodes - 5)/6) + 1
 '''
 def generate_nbad_multibl(num_nodes:int):
-	n = int(np.round(((num_nodes-5)/6)+1))
+	n = int(np.round(((num_nodes-5)/4)+1))
 	G = nx.Graph()
 
 	#add s and t and all s_i,t_i; connect s to all s_i and t to all t_i
@@ -422,10 +424,8 @@ def generate_nbad_multibl(num_nodes:int):
 		ti = 't_{}'.format(i)
 		l1i = 'l1_{}'.format(i)
 		l2i = 'l2_{}'.format(i)
-		l3i = 'l3_{}'.format(i)
-		pi = 'p_{}'.format(i)
-		G.add_edges_from([(si,l1i),(l1i,l2i),(l2i,l3i),(l3i,ti),#path i [length 6]
-						  (si,pi),(pi,'m'),#path p_i [length 5]
+		G.add_edges_from([(si,l1i),(l1i,l2i),(l2i,ti),#path i [length 5]
+						  (si,'m'),#path st_i [length 4]
 						  ('m',ti)#the real killer
 						  ])
 

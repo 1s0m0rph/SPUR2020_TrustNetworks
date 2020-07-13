@@ -178,7 +178,7 @@ class TestUtils(TestCase):
 
 	def test_generate_nbad_multibl(self):
 		n = 15
-		num_nodes = 5 + 6*(n-1)
+		num_nodes = 4*(n-1) + 5
 		G = generate_nbad_multibl(num_nodes)
 		# tng = convert_nx_graph_to_TN(G,HyperNode,3)
 
@@ -193,7 +193,7 @@ class TestUtils(TestCase):
 
 		#also for even n
 		n = 20
-		num_nodes = 5 + 6 * (n - 1)
+		num_nodes = 4*(n-1) + 5
 		G = generate_nbad_multibl(num_nodes)
 
 		assert (len(G) == num_nodes)
