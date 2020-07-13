@@ -274,6 +274,8 @@ METRIC_ORDERING = ['num_paths_found_mean','num_paths_found_stdev',
 GRAPH_FNS = {'con-er':generate_connected_ER_graph,#connected erdos renyi
 			 'pnas-sn':generate_connected_rand_graph_from_deg_dist,#pnas social network
 			 'con-er-var':generate_connected_variable_dense_ER_graph,#connected erdos renyi -- variable density
+			 'nbad-union':generate_nbad_unioning_fast,#nbad example for path unioning vs best of returned paths (also for naive blacklisting)
+			 'nbad-multibl':generate_nbad_multibl,#nbad example for multiblacklisting, assuming pathfinder is shortest-path (e.g. bfs)
 			 #add map from graph type string onto the actual generating function here
 			 }
 
@@ -302,7 +304,7 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,s
 
 		results.append([len(G),*rmp_ret])
 		if show_progress:
-			print('Finished graph {} of {} ({:.1f}% done)'.format(ndone + 1,len(graph_sizes),100. * float(ndone) / float(len(graph_sizes))))
+			print('Finished graph {} of {} ({:.1f}% done)'.format(ndone + 1,len(graph_sizes),100. * float(ndone + 1) / float(len(graph_sizes))))
 
 
 	#deduce repetition number
@@ -378,8 +380,8 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Experiment runner for VD path algorithm comparison")
 	parser.add_argument('-a','--path_algorithm',nargs=1,type=str,choices=ALL_PATH_ALGS,default=['only-opt'],help='Which algorithm will be used to calculate VD paths between s and t.')
 	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
-	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=[1],help="First graph generator argument (for ER graphs, this is the average degree, for directeds it's approximate reciprocity, for variable density, this is the scale)")
-	parser.add_argument('-1','--graph_arg_1',nargs=1,type=str,default=[1],help="Second graph generator argument (for variable density, this is the name of the function (see util::generate_connected_variable_dense_ER_graph))")
+	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=None,help="First graph generator argument (for ER graphs, this is the average degree, for directeds it's approximate reciprocity, for variable density, this is the scale)")
+	parser.add_argument('-1','--graph_arg_1',nargs=1,type=str,default=None,help="Second graph generator argument (for variable density, this is the name of the function (see util::generate_connected_variable_dense_ER_graph))")
 	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
 	parser.add_argument('-l','--min_graph_size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
 	parser.add_argument('-b','--max_graph_size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
@@ -407,10 +409,13 @@ if __name__ == '__main__':
 	#end
 	#graph generator args begin
 	generator = GRAPH_FNS[args.graph_type[0]]
-	graph_generator_arguments = [args.graph_arg_0[0],
-								 args.graph_arg_1[0],
-								 #add others here and in the parser (-1, -2, ...)
-								 ]
+	graph_generator_arguments = []
+	for arg in [args.graph_arg_0
+				,args.graph_arg_1,
+				# add others here and in the parser (-1, -2, ...)
+				]:
+		if arg is not None:
+			graph_generator_arguments.append(arg[0])
 	#end
 	#high level runner args begin
 	sample_pair_proportion = args.sample_pair_proportion[0]
@@ -445,7 +450,7 @@ if __name__ == '__main__':
 	runner_kwargs.update({'sample_pair_proportion':sample_pair_proportion,
 						  'max_npairs':max_npairs,
 						  'compare_to_optimal':compare_to_optimal,
-						  'progress_interval':sp_progress
+						  'progress_interval':sp_progress,
 						  })
 
 
