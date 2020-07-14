@@ -201,3 +201,25 @@ class TestUtils(TestCase):
 		# should have n paths
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
 		assert (npaths == n)
+
+	def test_generate_nbad_either(self):
+		n = 15
+		num_nodes = n**2 + 3*n + 2
+		G = generate_nbad_either(num_nodes)
+
+		assert(len(G) == num_nodes)
+
+		#should have ceil(n/2) paths
+		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
+		assert(npaths == int(np.ceil(n/2)))
+
+		#also for even n
+		n = 20
+		num_nodes = n ** 2 + 3 * n + 2
+		G = generate_nbad_either(num_nodes)
+
+		assert(len(G) == num_nodes)
+
+		#should have ceil(n/2) paths
+		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
+		assert(npaths == int(np.ceil(n / 2)))

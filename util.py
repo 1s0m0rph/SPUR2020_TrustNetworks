@@ -300,7 +300,7 @@ def generate_connected_variable_dense_ER_graph(num_nodes:int,scale:float,ftype:s
 	avg_deg = scale * f(num_nodes)
 	return generate_connected_ER_graph(num_nodes,avg_deg,seed=seed)
 
-def generate_nbad_unioning_fast(num_nodes:int):
+def generate_nbad_unioning_fast(num_nodes:int) -> nx.Graph:
 	# first find the nearest n
 	n = int(np.round((np.sqrt(4 * num_nodes - 11) + 1) / 2))
 	# initialize the graph
@@ -354,7 +354,7 @@ guaranteed to have ceil(n/2) vd paths between s and t
 
 interesting note: these graphs appear to always be planar
 '''
-def generate_nbad_unioning(num_nodes:int):
+def generate_nbad_unioning(num_nodes:int) -> nx.Graph:
 	#first find the nearest n
 	n = int(np.round((np.sqrt(4*num_nodes - 11) + 1)/2))
 	#initialize the graph
@@ -403,10 +403,10 @@ def generate_nbad_unioning(num_nodes:int):
 '''
 n-bad example for multiblacklisting, assuming the pathfinding algorithm finds shortest paths
 
-number of nodes as a function of n: 5 + 6(n-1) [(s,t,s1,m,t1,t) + (si,pi,l1i,l2i,l3i,ti for i in 1,n)]
+number of nodes as a function of n: 5 + 4(n-1) [(s,t,s1,m,t1,t) + (si,pi,l1i,l2i,l3i,ti for i in 1,n)]
 so n as function of num_nodes = ((num_nodes - 5)/6) + 1
 '''
-def generate_nbad_multibl(num_nodes:int):
+def generate_nbad_multibl(num_nodes:int) -> nx.Graph:
 	n = int(np.round(((num_nodes-5)/4)+1))
 	G = nx.Graph()
 
@@ -429,4 +429,31 @@ def generate_nbad_multibl(num_nodes:int):
 						  ('m',ti)#the real killer
 						  ])
 
+	return G
+
+'''
+n-bad example for both multiblacklisting/neighbor-blacklist AND naive blacklisting/best-of-n-paths
+
+number of nodes as a function of n: n^2 + 3n + 2
+'''
+def generate_nbad_either(num_nodes:int):
+	n = int(np.round((np.sqrt(4*num_nodes + 1) - 3)/2))
+
+	nnodes_U = n**2 - n + 3
+	U = generate_nbad_unioning_fast(nnodes_U)
+
+	nnodes_M = 4*(n-1) + 5
+	M = generate_nbad_multibl(nnodes_M)
+
+	M.remove_node('t')
+	U.remove_node('s')
+
+	G = nx.union(M,U,rename=('M-','U-'))
+
+	#merge the appropriate nodes
+	for i in range(n):
+		#connect 'M-t_{i}' with 'U-({i},0)'
+		G.add_edge('M-t_{}'.format(i),'U-({}, 0)'.format(i))
+
+	G = nx.relabel_nodes(G,{'M-s':'s','U-t':'t'})
 	return G
