@@ -39,13 +39,13 @@ DECENTRALIZED_PATH_ALGS = ['TN-v2',
 						   'synch-v2',
 						   'hyper-addr',
 						   'hyper',
-						   'hyper-multi-addr',
-						   'hyper-multi']
+						   'hyper-neigh-addr',
+						   'hyper-neigh']
 
 HYPER_EMBED_PATH_ALGS = ['hyper-addr',
 						 'hyper',
-						 'hyper-multi-addr',
-						 'hyper-multi']
+						 'hyper-neigh-addr',
+						 'hyper-neigh']
 
 CENTRALIZED_PATH_ALGS = ['only-opt','local-mf']
 
@@ -53,8 +53,8 @@ ALL_PATH_ALGS = DECENTRALIZED_PATH_ALGS + CENTRALIZED_PATH_ALGS
 
 #inverse map from algorithms to the options they can use (that is, maps options to the algorithms that use them)
 PATH_ALGS_OPTIONS_USED_INV = {'max_paths':['hyper','hyper-addr'],
-							  'max_dist_scale':['hyper','hyper-addr','hyper-multi','hyper-multi-addr'],
-							  'stop_on_first_failure':['hyper','hyper-addr','hyper-multi','hyper-multi-addr'],#TODO add this option for TN-v2?
+							  'max_dist_scale':['hyper','hyper-addr','hyper-neigh','hyper-neigh-addr'],
+							  'stop_on_first_failure':['hyper','hyper-addr','hyper-neigh','hyper-neigh-addr'],#TODO add this option for TN-v2?
 							  #TODO add TTL
 							  }
 
@@ -107,8 +107,8 @@ path alg possibilities:
 	'synch-v2':			TNNode_Stepper.count_vd_paths_to_v2(destination id, return paths = True, TTL = infinity)
 	'hyper-addr':		HyperNode.count_vd_paths_to_hyper_from_addr(dest address, npaths=inf, max distance scale = inf, stop on first fail = false)
 	'hyper':			HyperNode.count_vd_paths_to_hyper(dest coordinates, npaths=inf, max distance scale = inf, stop on first fail = false)
-	'hyper-multi-addr':	HyperNode.count_vd_paths_to_hyper_multibl_from_addr(dest address, max distance scale = inf, stop on first fail = false)
-	'hyper-multi':		HyperNode.count_vd_paths_to_hyper_multibl(dest coordinates, max distance scale = inf, stop on first fail = false)
+	'hyper-neigh-addr':	HyperNode.count_vd_paths_to_hyper_neighborbl_from_addr(dest address, max distance scale = inf, stop on first fail = false)
+	'hyper-neigh':		HyperNode.count_vd_paths_to_hyper_neighborbl(dest coordinates, max distance scale = inf, stop on first fail = false)
 	'local-mf':			hyper_VD_paths_local(hyperbolic graph, start, target, max distance scale = inf, distance measure = 'path', autoscale increment = none)
 	'only-opt':			vertex_disjoint_paths(nx graph, start, target)
 	(+more as they are added)
@@ -158,14 +158,14 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
 		paths = G[s].count_vd_paths_to_hyper(G[t].coords,**kwargs)
-	elif vd_path_alg == 'hyper-multi-addr':
+	elif vd_path_alg == 'hyper-neigh-addr':
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
-		paths = G[s].count_vd_paths_to_hyper_multibl_from_addr(G[t].saddr,**kwargs)
-	elif vd_path_alg == 'hyper-multi':
+		paths = G[s].count_vd_paths_to_hyper_neighborbl_from_addr(G[t].saddr,**kwargs)
+	elif vd_path_alg == 'hyper-neigh':
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
-		paths = G[s].count_vd_paths_to_hyper_multibl(G[t].coords,**kwargs)
+		paths = G[s].count_vd_paths_to_hyper_neighborbl(G[t].coords,**kwargs)
 	elif vd_path_alg == 'local-mf':
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
@@ -271,11 +271,12 @@ METRIC_ORDERING = ['num_paths_found_mean','num_paths_found_stdev',
 					'optimal_usage_mean','optimal_usage_stdev',
 					'messages_sent_per_node_used_mean','messages_sent_per_node_used_stdev']
 
-GRAPH_FNS = {'con-er':generate_connected_ER_graph,#connected erdos renyi
-			 'pnas-sn':generate_connected_rand_graph_from_deg_dist,#pnas social network
-			 'con-er-var':generate_connected_variable_dense_ER_graph,#connected erdos renyi -- variable density
-			 'nbad-union':generate_nbad_unioning_fast,#nbad example for path unioning vs best of returned paths (also for naive blacklisting)
-			 'nbad-multibl':generate_nbad_multibl,#nbad example for multiblacklisting, assuming pathfinder is shortest-path (e.g. bfs)
+GRAPH_FNS = {'con-er':generate_connected_ER_graph,  #connected erdos renyi
+			 'pnas-sn':generate_connected_rand_graph_from_deg_dist,  #pnas social network
+			 'con-er-var':generate_connected_variable_dense_ER_graph,  #connected erdos renyi -- variable density
+			 'nbad-union':generate_nbad_unioning_fast,  #nbad example for path unioning vs best of returned paths (also for naive blacklisting)
+			 'nbad-neighborbl':generate_nbad_neighborbl,  #nbad example for neighbor-blacklisting, assuming pathfinder is shortest-path (e.g. bfs)
+			 'nbad-either':generate_nbad_either,  #nbad example for both unioning and neighbor-bl
 			 #add map from graph type string onto the actual generating function here
 			 }
 

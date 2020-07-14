@@ -1,7 +1,7 @@
 from TN import *
 
 """
-#### Algorithm ideas
+####Algorithm ideas
 
 Orthogonal question: when to stop trying paths
 - when you can't find any more? Seems to use too many nodes
@@ -337,7 +337,7 @@ class HyperNode(TNNode):
 	
 	
 	"""
-	partial/multiple blacklisting
+	neighbor-blacklisting
 	"""
 
 	'''
@@ -347,21 +347,21 @@ class HyperNode(TNNode):
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
-	def count_vd_paths_to_hyper_multibl_from_addr(self,dest_addr,max_dist_scale=float('inf'),stop_on_first_failure=False):
+	def count_vd_paths_to_hyper_neighborbl_from_addr(self,dest_addr,max_dist_scale=float('inf'),stop_on_first_failure=False):
 		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper_multibl(dest_coords,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
+		return self.count_vd_paths_to_hyper_neighborbl(dest_coords,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
 
 
 	'''
 	this should technically be private access, but speed dictates it not be
 	'''
-	def count_vd_paths_to_hyper_multibl(self,dest_coords,max_dist_scale=float('inf'),stop_on_first_failure=False):
+	def count_vd_paths_to_hyper_neighborbl(self,dest_coords,max_dist_scale=float('inf'),stop_on_first_failure=False):
 		st_dist = hyper_dist(self.coords,dest_coords)
 		#start a search to dest from ourselves
 		candidate_paths = []
 		pulse_num = 0
 		while self.max_neighbor_called < (len(self.neighbors)-1):#semantically identical to just doing the neighbor loop
-			path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
+			path_ret = self.gnh_neighborbl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
 			pulse_num += 1
 			if path_ret is not None:
 				candidate_paths.append([self] + path_ret)
@@ -370,7 +370,7 @@ class HyperNode(TNNode):
 
 		self.reset_search()
 
-		# now calculate a graph union among all the candidate paths and use that to do a strict max flow
+		#now calculate a graph union among all the candidate paths and use that to do a strict max flow
 		if len(candidate_paths) > 0:
 			paths = vd_paths_from_candidates(candidate_paths,self,candidate_paths[0][-1])
 		else:
@@ -379,12 +379,12 @@ class HyperNode(TNNode):
 		return paths
 
 
-	def gnh_multibl_interm(self,dest_coords,pred,pulse_num,st_dist,max_dist_scale):
+	def gnh_neighborbl_interm(self,dest_coords,pred,pulse_num,st_dist,max_dist_scale):
 		if self.coords == dest_coords:#this has to happen before the visited check to implement path shadowing
 			#blacklist nodes on this path
 			self.pulse_pred.update({pulse_num:pred})
 			self.resetted_flag = False
-			path = self.multi_blacklist_zip(pulse_num,[])
+			path = self.neighbor_blacklist_zip(pulse_num,[])
 			return path
 
 		if pulse_num in self.pulse_pred:
@@ -401,7 +401,7 @@ class HyperNode(TNNode):
 			neighbor = neighbors_to_call[nidx]
 			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
 				self.operations_done += 1
-				path_ret = neighbor.gnh_multibl_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
+				path_ret = neighbor.gnh_neighborbl_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
 				self.max_neighbor_called = nidx
 				if path_ret is not None:
 					return path_ret
@@ -415,12 +415,19 @@ class HyperNode(TNNode):
 
 	this method also reconstructs the path
 	'''
-	def multi_blacklist_zip(self,pulse_num,path: list):
+	def neighbor_blacklist_zip(self,pulse_num,path: list):
 		if (pulse_num not in self.pulse_pred) or (self.pulse_pred[pulse_num] is None):
-			return path #drop the first one (s)
+			return path#drop the first one (s)
 
 		self.operations_done += 1#in order to retrace these paths we need to send another message
-		return self.pulse_pred[pulse_num].multi_blacklist_zip(pulse_num,[self] + path)
+		return self.pulse_pred[pulse_num].neighbor_blacklist_zip(pulse_num,[self] + path)
+	
+	
+	"""
+	version 2 multiblacklisting (technically more accurate to call this one multibl)
+	"""
+
+	#TODO implement this
 
 
 """

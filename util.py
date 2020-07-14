@@ -401,12 +401,12 @@ def generate_nbad_unioning(num_nodes:int) -> nx.Graph:
 	return G
 
 '''
-n-bad example for multiblacklisting, assuming the pathfinding algorithm finds shortest paths
+n-bad example for neighbor-blacklist, assuming the pathfinding algorithm finds shortest paths
 
 number of nodes as a function of n: 5 + 4(n-1) [(s,t,s1,m,t1,t) + (si,pi,l1i,l2i,l3i,ti for i in 1,n)]
 so n as function of num_nodes = ((num_nodes - 5)/6) + 1
 '''
-def generate_nbad_multibl(num_nodes:int) -> nx.Graph:
+def generate_nbad_neighborbl(num_nodes:int) -> nx.Graph:
 	n = int(np.round(((num_nodes-5)/4)+1))
 	G = nx.Graph()
 
@@ -432,7 +432,7 @@ def generate_nbad_multibl(num_nodes:int) -> nx.Graph:
 	return G
 
 '''
-n-bad example for both multiblacklisting/neighbor-blacklist AND naive blacklisting/best-of-n-paths
+n-bad example for both neighbor-blacklist AND naive blacklisting/best-of-n-paths
 
 number of nodes as a function of n: n^2 + 3n + 2
 '''
@@ -443,7 +443,7 @@ def generate_nbad_either(num_nodes:int):
 	U = generate_nbad_unioning_fast(nnodes_U)
 
 	nnodes_M = 4*(n-1) + 5
-	M = generate_nbad_multibl(nnodes_M)
+	M = generate_nbad_neighborbl(nnodes_M)
 
 	M.remove_node('t')
 	U.remove_node('s')

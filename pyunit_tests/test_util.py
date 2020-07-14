@@ -176,10 +176,10 @@ class TestUtils(TestCase):
 		assert(exp_avg_degree + tolerance > avg_deg)
 
 
-	def test_generate_nbad_multibl(self):
+	def test_generate_nbad_neighborbl(self):
 		n = 15
 		num_nodes = 4*(n-1) + 5
-		G = generate_nbad_multibl(num_nodes)
+		G = generate_nbad_neighborbl(num_nodes)
 		# tng = convert_nx_graph_to_TN(G,HyperNode,3)
 
 		assert(len(G) == num_nodes)
@@ -188,13 +188,13 @@ class TestUtils(TestCase):
 		npaths = vertex_disjoint_paths(G,'s','t',retrace=False)
 		assert(npaths == n)
 
-		# paths_ret = tng[0].count_vd_paths_to_hyper_multibl(tng[1].coords)#doesn't actually work on this because this implementation doesn't find the shortest path (we'd need to enforce some particular embedding in order to make it work correctly)
+		# paths_ret = tng[0].count_vd_paths_to_hyper_neighborbl(tng[1].coords)#doesn't actually work on this because this implementation doesn't find the shortest path (we'd need to enforce some particular embedding in order to make it work correctly)
 		# assert(len(paths_ret) == 1)
 
 		#also for even n
 		n = 20
 		num_nodes = 4*(n-1) + 5
-		G = generate_nbad_multibl(num_nodes)
+		G = generate_nbad_neighborbl(num_nodes)
 
 		assert (len(G) == num_nodes)
 
