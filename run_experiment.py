@@ -40,12 +40,14 @@ DECENTRALIZED_PATH_ALGS = ['TN-v2',
 						   'hyper-addr',
 						   'hyper',
 						   'hyper-neigh-addr',
-						   'hyper-neigh']
+						   'hyper-neigh',
+						   'hyper-multi']
 
 HYPER_EMBED_PATH_ALGS = ['hyper-addr',
 						 'hyper',
 						 'hyper-neigh-addr',
-						 'hyper-neigh']
+						 'hyper-neigh',
+						 'hyper-multi']
 
 CENTRALIZED_PATH_ALGS = ['only-opt','local-mf']
 
@@ -53,8 +55,8 @@ ALL_PATH_ALGS = DECENTRALIZED_PATH_ALGS + CENTRALIZED_PATH_ALGS
 
 #inverse map from algorithms to the options they can use (that is, maps options to the algorithms that use them)
 PATH_ALGS_OPTIONS_USED_INV = {'max_paths':['hyper','hyper-addr'],
-							  'max_dist_scale':['hyper','hyper-addr','hyper-neigh','hyper-neigh-addr'],
-							  'stop_on_first_failure':['hyper','hyper-addr','hyper-neigh','hyper-neigh-addr'],#TODO add this option for TN-v2?
+							  'max_dist_scale':['hyper','hyper-addr','hyper-neigh','hyper-neigh-addr','hyper-multi'],
+							  'stop_on_first_failure':['hyper','hyper-addr','hyper-neigh','hyper-neigh-addr','hyper-multi'],#TODO add this option for TN-v2?
 							  #TODO add TTL
 							  }
 
@@ -109,6 +111,7 @@ path alg possibilities:
 	'hyper':			HyperNode.count_vd_paths_to_hyper(dest coordinates, npaths=inf, max distance scale = inf, stop on first fail = false)
 	'hyper-neigh-addr':	HyperNode.count_vd_paths_to_hyper_neighborbl_from_addr(dest address, max distance scale = inf, stop on first fail = false)
 	'hyper-neigh':		HyperNode.count_vd_paths_to_hyper_neighborbl(dest coordinates, max distance scale = inf, stop on first fail = false)
+	'hyper-multi':		HyperNode.count_vd_paths_to_hyper_multibl(dest coords, max dist scale = inf, stop on first fail = false)
 	'local-mf':			hyper_VD_paths_local(hyperbolic graph, start, target, max distance scale = inf, distance measure = 'path', autoscale increment = none)
 	'only-opt':			vertex_disjoint_paths(nx graph, start, target)
 	(+more as they are added)
@@ -166,6 +169,10 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
 		paths = G[s].count_vd_paths_to_hyper_neighborbl(G[t].coords,**kwargs)
+	elif vd_path_alg == 'hyper-multi':
+		if type(G[0]) != HyperNode:
+			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
+		paths = G[s].count_vd_paths_to_hyper_multibl(G[t].coords,**kwargs)
 	elif vd_path_alg == 'local-mf':
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")

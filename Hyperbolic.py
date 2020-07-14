@@ -152,6 +152,8 @@ class HyperNode(TNNode):
 
 		self.max_neighbor_called = -1#in a real system, one per search
 
+		self.times_blacklisted = 0
+
 	def __repr__(self):
 		return "HN, {} (@{})".format(self.id,self.saddr)
 
@@ -421,13 +423,107 @@ class HyperNode(TNNode):
 
 		self.operations_done += 1#in order to retrace these paths we need to send another message
 		return self.pulse_pred[pulse_num].neighbor_blacklist_zip(pulse_num,[self] + path)
-	
-	
+
+
 	"""
-	version 2 multiblacklisting (technically more accurate to call this one multibl)
+	multiblacklisting
+	
+	generally, each node asks its neighbors how many times they've been blacklisted and prioritizes them based on the ones which have been blacklisted the fewest times
 	"""
 
-	#TODO implement this
+	'''
+	initialize the search
+
+	npaths variable tells us how many paths to find (we'll stop when we find this many or when we have found the max).
+	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
+		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
+	'''
+	def count_vd_paths_to_hyper_multibl_from_addr(self,dest_addr,max_dist_scale=float('inf'),stop_on_first_failure=False):
+		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
+		return self.count_vd_paths_to_hyper_multibl(dest_coords,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
+
+	def get_num_times_blacklisted(self):
+		self.operations_done += 1#this is why this method is important
+		return self.times_blacklisted
+
+	'''
+	this should technically be private access, but speed dictates it not be
+	'''
+	def count_vd_paths_to_hyper_multibl(self,dest_coords,max_dist_scale=float('inf'),stop_on_first_failure=False):
+		st_dist = hyper_dist(self.coords,dest_coords)
+		#start a search to dest from ourselves
+		candidate_paths = []
+		pulse_num = 0
+		while self.max_neighbor_called < (len(self.neighbors) - 1):#semantically identical to just doing the neighbor loop
+			path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
+			pulse_num += 1
+			if path_ret is not None:
+				candidate_paths.append([self] + path_ret)
+			elif stop_on_first_failure:
+				break
+
+		self.reset_search()
+
+		#now calculate a graph union among all the candidate paths and use that to do a strict max flow
+		if len(candidate_paths) > 0:
+			paths = vd_paths_from_candidates(candidate_paths,self,candidate_paths[0][-1])
+		else:
+			paths = []
+
+		return paths
+
+	def gnh_multibl_interm(self,dest_coords,pred,pulse_num,st_dist,max_dist_scale):
+		if self.coords == dest_coords:#this has to happen before the visited check to implement path shadowing
+			#blacklist nodes on this path
+			self.pulse_pred.update({pulse_num:pred})
+			self.resetted_flag = False
+			path = self.multi_blacklist_zip(pulse_num)
+			return path
+
+		if pulse_num in self.pulse_pred:
+			return None#we've already been visited in this search
+
+		#we've relayed this pulse now
+		self.pulse_pred.update({pulse_num:pred})
+		self.resetted_flag = False
+
+		#otherwise ask the *right* neighbor(s) if they know the muffin man
+		neighbors_blacklist_counts = {n:n.get_num_times_blacklisted() for n in self.neighbors}
+		self.operations_done += len(self.neighbors)#send all of the blacklist-count requests
+		#primary sort is the blacklist count, secondary is distance to t
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:(neighbors_blacklist_counts[x],hyper_dist(x.coords,dest_coords))))
+		start_idx = self.max_neighbor_called + 1
+		for nidx in range(start_idx,len(neighbors_to_call)):
+			neighbor = neighbors_to_call[nidx]
+			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
+				self.operations_done += 1#send the pathfind request
+				path_ret = neighbor.gnh_multibl_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
+				self.max_neighbor_called = nidx
+				if path_ret is not None:
+					return path_ret
+
+		self.max_neighbor_called = len(self.neighbors) - 1
+
+		return None
+
+	'''
+	I am on the path to dest from s, so I need to be blacklisted
+
+	this method also reconstructs the path
+	
+	changed to loop to avoid recursion depth problems
+	'''
+	def multi_blacklist_zip(self,pulse_num):
+		#TODO implement tree-return for multi-blacklist zip?
+		path = []
+		current = self
+		while (pulse_num in current.pulse_pred) and (current.pulse_pred[pulse_num] is not None):
+			current.operations_done += 1#in order to retrace these paths we need to send another message
+			current.times_blacklisted += 1#blacklist ourselves for this one
+			path.insert(0,current)
+			current = current.pulse_pred[pulse_num]
+
+		return path
 
 
 """
