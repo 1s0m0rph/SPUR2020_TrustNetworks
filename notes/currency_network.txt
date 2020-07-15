@@ -57,3 +57,21 @@ central questions:
 		This is as opposed to x paying y with other people's currencies
 		
 		alternatively, certain graph motifs (particularly 3-node motifs) may lead to this naturally. If, by means of an exchange from y to z having happened, a reciprocated edge between x and z is created, currency along those edges can simply be reduced (by agreement between x and z) until there is no reciprocated edge (at least one of the edges reaches zero weight)
+		
+		
+
+----------------------------------
+
+In an ideal network, we won't deanonymize any member of the transaction. It seems like we have to, however, in order to detect/prevent double-spends. Is that really the case? If not, how do we detect double-spends without deanonymizing a or b?
+
+option a: one spend per unit of currency:
+	a makes the request to c to transfer units of currency which they have certificates for over to b (this doesn't have to deanonymize a because a only needs to send an encrypted [with c's public key] package containing all of those unit certs)
+	c verifies that a's certificates are valid
+		if they are not, c notifies b and the transaction is over
+		if they are, c invalidates them and remints n units, then sends these units to b
+	as soon as b recieves the units, the transaction is complete successfully
+	
+	[problem: deanonymizes b to c]
+		we can kind of fix this by just having b send a temporary public key for b along to c along with the initial request (which they get from a, encrypted with c's public key), then having c encrypt the new currency certs with b's temp public key, then send that either as a pulse (no deanonymization but it's really high-usage) or to either of a or b (if to a, then a just relays it on to b; this obviously deanonymizes whoever it gets sent to, but it doesn't use the network)
+			alternatively, we can do a sort of local-pulse to not totally deanonymize a or b, but also not use the *entire* network. Basically, c gets a vague idea of where b is in the embedding space and sends the encrypted packet off in that direction. Once the packet gets to that part of the space, we do a proper pulse *only within that space*. The smaller the space, the less network usage, but also the less anonymous it is.
+			This local-pulse thing can also be done by picking a nearby (in terms of number of links or embedding distance) scapegoat and telling c to send the message to them (encrypted) when it's ready along with a TTL (or max dist) that's sufficient to get to b. The scapegoat then starts a pulse, limited either by TTL or max distance.
