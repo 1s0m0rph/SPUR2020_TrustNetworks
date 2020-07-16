@@ -30,6 +30,7 @@ def hyper_dist(a:complex,b:complex):
 convert a succinct address (in-person sharing) to coordinates by running the generators forward
 '''
 def addr_to_coords_v0(q,addr):
+	#TODO make the hyperbolic coordinate system better (or delete it? I mean do we really even need it? in an app-implementation people are just going to have contacts and we can always just memorize the *coordinates* of our neighbors anyway...)
 	dummy = HyperNode(-1,q)
 	dummy.init_as_root()
 	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
@@ -152,7 +153,7 @@ class HyperNode(TNNode):
 
 		self.max_neighbor_called = -1#in a real system, one per search
 
-		self.times_blacklisted = 0
+		self.times_visited = 0
 
 	def __repr__(self):
 		return "HN, {} (@{})".format(self.id,self.saddr)
@@ -426,9 +427,9 @@ class HyperNode(TNNode):
 
 
 	"""
-	multiblacklisting
+	multi-visit algorithm
 	
-	generally, each node asks its neighbors how many times they've been blacklisted and prioritizes them based on the ones which have been blacklisted the fewest times
+	generally, each node asks its neighbors how many times they've been visited and prioritizes them based on the ones which have been visited the fewest times
 	"""
 
 	'''
@@ -438,24 +439,24 @@ class HyperNode(TNNode):
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
 	'''
-	def count_vd_paths_to_hyper_multibl_from_addr(self,dest_addr,max_dist_scale=float('inf'),stop_on_first_failure=False):
+	def count_vd_paths_to_hyper_multivisit_from_addr(self,dest_addr,max_dist_scale=float('inf'),stop_on_first_failure=False):
 		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper_multibl(dest_coords,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
+		return self.count_vd_paths_to_hyper_multivisit(dest_coords,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
 
-	def get_num_times_blacklisted(self):
+	def get_num_times_visited(self):
 		self.operations_done += 1#this is why this method is important
-		return self.times_blacklisted
+		return self.times_visited
 
 	'''
 	this should technically be private access, but speed dictates it not be
 	'''
-	def count_vd_paths_to_hyper_multibl(self,dest_coords,max_dist_scale=float('inf'),stop_on_first_failure=False):
+	def count_vd_paths_to_hyper_multivisit(self,dest_coords,max_dist_scale=float('inf'),stop_on_first_failure=False):
 		st_dist = hyper_dist(self.coords,dest_coords)
 		#start a search to dest from ourselves
 		candidate_paths = []
 		pulse_num = 0
 		while self.max_neighbor_called < (len(self.neighbors) - 1):#semantically identical to just doing the neighbor loop
-			path_ret = self.gnh_multibl_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
+			path_ret = self.gnh_multivisit_interm(dest_coords,None,pulse_num,st_dist,max_dist_scale)
 			pulse_num += 1
 			if path_ret is not None:
 				candidate_paths.append([self] + path_ret)
@@ -472,12 +473,12 @@ class HyperNode(TNNode):
 
 		return paths
 
-	def gnh_multibl_interm(self,dest_coords,pred,pulse_num,st_dist,max_dist_scale):
+	def gnh_multivisit_interm(self,dest_coords,pred,pulse_num,st_dist,max_dist_scale):
 		if self.coords == dest_coords:#this has to happen before the visited check to implement path shadowing
 			#blacklist nodes on this path
 			self.pulse_pred.update({pulse_num:pred})
 			self.resetted_flag = False
-			path = self.multi_blacklist_zip(pulse_num)
+			path = self.multi_visit_zip(pulse_num)
 			return path
 
 		if pulse_num in self.pulse_pred:
@@ -488,7 +489,7 @@ class HyperNode(TNNode):
 		self.resetted_flag = False
 
 		#otherwise ask the *right* neighbor(s) if they know the muffin man
-		neighbors_blacklist_counts = {n:n.get_num_times_blacklisted() for n in self.neighbors}
+		neighbors_blacklist_counts = {n:n.get_num_times_visited() for n in self.neighbors}
 		self.operations_done += len(self.neighbors)#send all of the blacklist-count requests
 		#primary sort is the blacklist count, secondary is distance to t
 		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:(neighbors_blacklist_counts[x],hyper_dist(x.coords,dest_coords))))
@@ -497,7 +498,7 @@ class HyperNode(TNNode):
 			neighbor = neighbors_to_call[nidx]
 			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
 				self.operations_done += 1#send the pathfind request
-				path_ret = neighbor.gnh_multibl_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
+				path_ret = neighbor.gnh_multivisit_interm(dest_coords,self,pulse_num,st_dist,max_dist_scale)
 				self.max_neighbor_called = nidx
 				if path_ret is not None:
 					return path_ret
@@ -513,13 +514,13 @@ class HyperNode(TNNode):
 	
 	changed to loop to avoid recursion depth problems
 	'''
-	def multi_blacklist_zip(self,pulse_num):
+	def multi_visit_zip(self,pulse_num):
 		#TODO implement tree-return for multi-blacklist zip?
 		path = []
 		current = self
 		while (pulse_num in current.pulse_pred) and (current.pulse_pred[pulse_num] is not None):
 			current.operations_done += 1#in order to retrace these paths we need to send another message
-			current.times_blacklisted += 1#blacklist ourselves for this one
+			current.times_visited += 1#blacklist ourselves for this one
 			path.insert(0,current)
 			current = current.pulse_pred[pulse_num]
 
