@@ -524,6 +524,6 @@ if __name__ == '__main__':
 						out.write(',{}'.format(res_dict[metric]))
 				out.write('\n')
 
-		print('################################################## DONE ####################################################')
+		print('################################################## DONE ##################################################')
 
 	#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaand we're done. again. hopefully pycharm won't randomly decide to yeet half of this again
