@@ -1,7 +1,6 @@
 import numpy as np
 import networkx as nx
 import re
-import rsa
 import scipy.stats
 from typing import List, Union
 
@@ -59,9 +58,10 @@ use max flow on a modified version of G to find the number of vertex disjoint pa
 
 between the transform and the actual max flow algorithm, on big graphs this can take a looooooooooong time to run
 '''
-def vertex_disjoint_paths(G:nx.Graph,s,t,retrace=False) -> Union[List,int]:
+def vertex_disjoint_paths(G:nx.Graph,s,t,retrace=False,Gp=None) -> Union[List,int]:
 	#first modify G so that two-in two-out motifs evaluate correctly
-	Gp = vertex_disjoint_transform(nx.DiGraph(G))#shallow copy is fine
+	if Gp is None:
+		Gp = vertex_disjoint_transform(nx.DiGraph(G))#shallow copy is fine
 	#then run max flow on that graph with the caveat that if we used the fork node transform on s we need to change the start to s
 	if 'f{}'.format(s) in Gp.nodes:
 		s = 'f{}'.format(s)
@@ -456,4 +456,13 @@ def generate_nbad_either(num_nodes:int):
 		G.add_edge('M-t_{}'.format(i),'U-({}, 0)'.format(i))
 
 	G = nx.relabel_nodes(G,{'M-s':'s','U-t':'t'})
+	return G
+
+'''
+this function assumes it's always an edgelist (maybe add others if needed)
+first arg just here for the sake of regularity
+'''
+def read_graph_from_data(_,filename) -> nx.Graph:
+	G = nx.read_edgelist(filename,create_using=nx.Graph,delimiter=',',nodetype=int)
+	assert(nx.is_connected(G))#if not this won't work
 	return G

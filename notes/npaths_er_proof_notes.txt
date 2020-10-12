@@ -17,15 +17,14 @@ some things need to be proven:
 
 1. for each d in 1..Theta(log(n)), all trees almost certainly add at least one unique node
 	
-	certainly, for small k it's reasonable to say that a naive B_k(s_i) is disjoint for every i (clearly, it is for i=1, and in expectation it is for i=2 for sufficiently large graphs and so on)
+	certainly, for small i it's reasonable to say that a naive B_k(s_i) i+s disjoint for every i (clearly, it is for i=1, and in expectation it is for i=2 for sufficiently large graphs and so on; this is the same as saying that the size of the B_k(s) tree is exactly (np)^k)
 	
 	the number of (not necessarily unique) new nodes added on each time in total to all of the trees is kh^d where d is the current distance from s_i in tree S_i
 	
-	we take a certain S_i and ask ourselves, among the kh^d new nodes, how many might we expect to intersect with some S_j at this distance?
-		If we assume that it's essentially a uniform random probability for each node that it's also in another tree at this layer, then we would have a total of: (kh^d)/(kh-1) in expectation (number of nodes divided by number of other trees)
-		since kh is relatively large, we can approximate this as kh^(d-1)
+	we've seen a total of 2* sum from i=1 to d of kh^(i+1), so < kh^(d+2)
 	
-	this leaves us with a total of kh^d - kh^(d-1) new and unique vertices, assuming we simply drop out all intersecting ones, which increases as a function of d. Thus, we do expect to add on some number of unique vertices for each tree at each distance
+	chance of new node: 
+	
 
 2. the size of the sets S_i^d = n^((1+eps)/2) for d = 1 + (1+eps)/2 * log n / log np
 	I think the lecture notes argument works almost just straight up, but I'm not really sure how to apply it exactly...
@@ -41,11 +40,7 @@ some things need to be proven:
 	union-bounding over all deg(s) * deg(t) pairs of S_i^d, T_j^d gives us that the probability that any one pair has empty intersection is bounded by
 		
 		deg(s) * deg(t) * e^(-n^eps)
-		
-	which even for the sparsest of (connected ER) graphs is at worst
 	
-		(log n)/(log np))^2 * e^(-n^eps)
-	
-	which tends to zero as long as eps > 0
+	which tends to zero as long as eps > 0 (and, of course, deg(s) and deg(t) are no worse than n, which is true by definition for non-multigraphs)
 
 	thus, we can assume that the bipartite graph on these sets is fully connected. Thus, there must be exactly min(deg s, deg t) vd paths between s and t, in expectation

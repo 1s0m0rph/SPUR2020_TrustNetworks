@@ -45,15 +45,7 @@ def convert_nx_graph_to_TN(nxg:Union[nx.Graph,nx.DiGraph],node_type,*args,**kwar
 		retG = [node_type(i,*args,**kwargs) for i in range(len(nodes))]
 
 		#hyperbolic graphs must be built in a specific order (treelike) -- use a BFS tree to construct
-		root = nodes[0]
-		bfst = nx.algorithms.traversal.bfs_tree(nxg,root)#bfs tree from networkx
-		#use the tree to construct an ordering (pre-order tree traversal [parent then children])
-		node_order = nx_bfs_tree_preordering(bfst,root)
-		retG[idx_map[node_order[0]]].init_as_root()
-
-		for node in node_order:
-			for neighbor in nxg.neighbors(node):
-				retG[idx_map[node]].add_public_key_in_person(retG[idx_map[neighbor]])
+		retG = nx_bfs_tree_preordering_construct(nxg,retG,idx_map)
 
 
 	return retG
@@ -61,10 +53,34 @@ def convert_nx_graph_to_TN(nxg:Union[nx.Graph,nx.DiGraph],node_type,*args,**kwar
 '''
 construct a (pre) ordering of the nodes in bfst
 '''
+def nx_bfs_tree_preordering_construct(nxg,G,idx_map):
+	frontier = [0]#(arbitrarily?) choose root to be zero
+	G[frontier[0]].init_as_root()
+	# seen = {}#we'll use the search blacklist flag instead
+	#call on daughters
+	while len(frontier) > 0:
+		current = frontier.pop(0)
+
+		for n in nxg.neighbors(current):
+			ntn = G[idx_map[n]]
+			ntn.add_public_key_in_person(G[idx_map[current]])
+			if not ntn.search_blacklist_flag:
+				frontier.append(n)
+				ntn.search_blacklist_flag = True
+
+	#reset the bl flags
+	for node in G:
+		node.search_blacklist_flag = False
+
+	return G
+
+'''
+construct a (pre) ordering of the nodes in bfst
+'''
 def nx_bfs_tree_preordering(bfst,current,order=None):
 	if order is None:
 		order = []
-
+	#TODO make this faster so that it works on bigger (i.e. >100k node) networks -- probably need to do this inline with conversion
 	#pre-order
 	order = order + [current]
 	#call on daughters
@@ -75,5 +91,9 @@ def nx_bfs_tree_preordering(bfst,current,order=None):
 
 def pick_n_random_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],npairs:int):
 	#use numpy instead of trying to be too fancy
-	pairs = [(s,t) for s in range(len(G)) for t in range(s,len(G)) if (G[t] not in G[s].neighbors) and (s != t)]
-	return [pairs[i] for i in np.random.choice(list(range(len(pairs))),size=npairs,replace=False)]
+	if len(G) < 1000:#guaranteed different pairs (slow)
+		pairs = [(s,t) for s in range(len(G)) for t in range(s,len(G)) if (G[t] not in G[s].neighbors) and (s != t)]
+		return [pairs[i] for i in np.random.choice(list(range(len(pairs))),size=npairs,replace=False)]
+	s_idxs = np.random.randint(0,len(G),size=npairs)
+	t_idxs = np.random.randint(0,len(G),size=npairs)
+	return list(zip(s_idxs,t_idxs))

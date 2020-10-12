@@ -233,10 +233,16 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 
 	#what will the pairs be?
 	pairs = pick_n_random_pairs(G,npairs)
+	print('pairs: {}'.format(len(pairs)))
+
+	nxG = convert_to_nx_graph(G)
+	Gp = None
+	if compare_to_optimal:
+		#calculate the v-d transform now
+		Gp = vertex_disjoint_transform(nx.DiGraph(nxG))
 
 	#do the pairs
 	pairs_run = 0
-	nxG = convert_to_nx_graph(G)
 	for s,t in pairs:
 		if (progress_interval != 0) and ((pairs_run % progress_interval) == 0):
 			print('{} of {} pairs evaluated ({:.1f}%)'.format(pairs_run,npairs,100. * float(pairs_run) / float(npairs)))
@@ -244,7 +250,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		exact_total_paths = 0
 		opt_num_nodes = 0
 		if compare_to_optimal:
-			exact_paths = vertex_disjoint_paths(nxG,s,t,retrace=True)
+			exact_paths = vertex_disjoint_paths(nxG,s,t,retrace=True,Gp=Gp)
 			if validate_paths:
 				validate_returned_paths(G,exact_paths,s,t,verbose=True)
 			opt_num_nodes = sum([len(path)-1 for path in exact_paths]) + 1#don't count t for all of these -- just count it once
@@ -284,6 +290,7 @@ GRAPH_FNS = {'con-er':generate_connected_ER_graph,  #connected erdos renyi
 			 'nbad-union':generate_nbad_unioning_fast,  #nbad example for path unioning vs best of returned paths (also for naive blacklisting)
 			 'nbad-neighborbl':generate_nbad_neighborbl,  #nbad example for neighbor-blacklisting, assuming pathfinder is shortest-path (e.g. bfs)
 			 'nbad-either':generate_nbad_either,  #nbad example for both unioning and neighbor-bl
+			 'data':read_graph_from_data,#use an actual graph
 			 #add map from graph type string onto the actual generating function here
 			 }
 

@@ -227,18 +227,19 @@ class HyperNode(TNNode):
 	'''
 	add this node as a daughter and give it the info it needs (coords, index, isometry)
 	'''
-	def add_daughter(self,d):
-		if self.d_add_search_flag:
+	def add_daughter(self,d,visited=None):
+		if visited is None:
+			visited = set()
+		if self in visited:
 			return None
-		self.d_add_search_flag = True
-		self.resetted_flag = False
+		visited.add(self)
 		if len(self.d_coords) > 0:
 			self.daughters.add(d)
 			return self.d_coords.pop(0)
 		else:
 			#ask our neighbors if they can add d
 			for neighbor in self.neighbors:
-				info = neighbor.add_daughter(d)
+				info = neighbor.add_daughter(d,visited)
 				if info is not None:
 					return info
 			return None
@@ -254,7 +255,7 @@ class HyperNode(TNNode):
 				raise AttributeError("Tried to connect two nodes that weren't already in the network")
 			#make n our parent
 			self.coords, self.idx, self.isom, self.saddr = n.add_daughter(self)
-			n.reset_search()
+			# n.reset_search()#WHY was this being done?
 			self.calculate_daughter_coords()
 
 		self.neighbors.add(n)
