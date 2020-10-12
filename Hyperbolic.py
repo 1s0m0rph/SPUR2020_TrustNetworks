@@ -26,67 +26,6 @@ arguments are complex numbers
 def hyper_dist(a:complex,b:complex):
 	return np.arccosh(1 + (2*(abs(a-b)**2))/((1 - abs(a)**2)*(1 - abs(b)**2)))
 
-'''
-convert a succinct address (in-person sharing) to coordinates by running the generators forward
-'''
-def addr_to_coords_v0(q,addr):
-	#TODO make the hyperbolic coordinate system better (or delete it? I mean do we really even need it? in an app-implementation people are just going to have contacts and we can always just memorize the *coordinates* of our neighbors anyway...)
-	dummy = HyperNode(-1,q)
-	dummy.init_as_root()
-	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
-	#pad with zeroes until the length is correct
-	w = int(np.log2(q + 2))#q should be 2 less than a power of 2
-	while len(addr_str) % w != 0:
-		addr_str = '0' + addr_str
-
-	gen_idx = int(addr_str[:w],2) - 1#generator index is funky for the first one so that root has a unique address
-	if gen_idx == -1:
-		return dummy.coords
-	dummy = HyperNode(-1,q,*dummy.d_coords[gen_idx])
-	dummy.calculate_daughter_coords()
-	addr_str = addr_str[w:]
-	while len(addr_str) > 0:
-		gen_idx = int(addr_str[:w],2) - 1
-		if gen_idx == -1:
-			return dummy.coords
-		dummy = HyperNode(-1,q,*dummy.d_coords[gen_idx])
-		dummy.calculate_daughter_coords()
-		addr_str = addr_str[w:]
-
-	return dummy.coords
-
-
-'''
-convert a succinct address (in-person sharing) to coordinates by running the generators forward
-
-version 1
-'''
-def addr_to_coords(q,addr,n_levelbits):
-	dummy = HyperNode(-1,q)
-	dummy.ADDRESS_LEVEL_BITS = n_levelbits
-	dummy.init_as_root()
-	addr = dummy.succ_addr_to_int(addr)
-	addr_str = bin(addr)[2:]#should be unsigned so this shouldn't matter
-	#pad with zeroes until the length is correct
-	w = int(np.log2(q-1))#q should be 1 more than a power of 2
-	while len(addr_str) < np.dtype(addr).itemsize*8:
-		addr_str = '0' + addr_str
-
-	#get the level
-	level = int(addr_str[:n_levelbits],2)
-	addr_str = addr_str[n_levelbits:]
-
-	gen_idx = 0
-	addr_str = (''.join(reversed(addr_str)))[:level*w]#have to go backwards because of how things were added
-	for _ in range(level):
-		gen_idx = int(addr_str[-w:],2)
-		dummy = HyperNode(-1,q,*dummy.d_coords[gen_idx])
-		dummy.calculate_daughter_coords()
-		addr_str = addr_str[:-w]
-
-	return dummy.coords
-
-
 class Isometry:
 
 	def __init__(self,rotation,translation):
@@ -134,7 +73,7 @@ class HyperNode(TNNode):
 	ADDRESS_DTYPE = np.int64
 	ADDRESS_LEVEL_BITS = 8#how many bits in the address are devoted to the level in the tree?
 
-	def __init__(self,node_id,q,coordinates=None,index=None,isometry=None,saddr=None):
+	def __init__(self,node_id,q,coordinates=None,index=None,isometry=None):
 		super().__init__(node_id)
 		self.coords = coordinates
 		self.idx = index
@@ -142,9 +81,6 @@ class HyperNode(TNNode):
 		self.q = q
 
 		self.d_coords = []#list of available daughter coords (list of [(coords,index,isometry)] which can instantiate daughters)
-		self.saddr = saddr#address (k bits of level, width-k bits of address)
-		#only store the succinct address since the coordinates are a better exact address anyway
-		#self.calculate_daughter_coords()
 
 		self.neighbors = set()
 		self.daughters = set()
@@ -156,7 +92,7 @@ class HyperNode(TNNode):
 		self.times_visited = 0
 
 	def __repr__(self):
-		return "HN, {} (@{})".format(self.id,self.saddr)
+		return "HN, {} (@{})".format(self.id,self.coords)
 
 	def reset_all_and_return_ops(self):
 		ops = super().reset_all_and_return_ops()
@@ -165,30 +101,12 @@ class HyperNode(TNNode):
 		return ops
 
 	'''
-	convert an int address to a succinct address
-	'''
-	def int_addr_to_succ(self,iaddr):
-		n_nybble = np.dtype(self.ADDRESS_DTYPE).itemsize * 2
-		uncompressed = hex(iaddr)[2:]
-		while len(uncompressed) < n_nybble:
-			uncompressed = '0' + uncompressed
-		return str_compress(uncompressed)
-
-	'''
-	convert a succinct address to an int address
-	'''
-	def succ_addr_to_int(self,saddr):
-		return self.ADDRESS_DTYPE(int(str_decompress(saddr),16))
-
-
-	'''
 	algorithm 2
 	'''
 	def init_as_root(self):
 		self.coords = 0 + 0j
 		self.idx = 0
 		self.isom = Isometry(1 + 0j,0 + 0j)
-		self.saddr = '0'#reserved root address
 		self.calculate_daughter_coords()
 
 	'''
@@ -197,27 +115,12 @@ class HyperNode(TNNode):
 	def calculate_daughter_coords(self):
 		generators = define_generators(self.q)
 
-		paddr = self.succ_addr_to_int(self.saddr)
-
-		w = self.ADDRESS_DTYPE(int(np.log2(self.q - 1)))
-		level_mask = (self.ADDRESS_DTYPE(1) << (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - 1)) >> self.ADDRESS_LEVEL_BITS - 1
-		d_level = (((paddr & level_mask) >> (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - self.ADDRESS_LEVEL_BITS)) + 1)
-		bound_check_mask = ~((self.ADDRESS_DTYPE(1) << (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - 1)) >> (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - self.ADDRESS_LEVEL_BITS))
-		if d_level >= bound_check_mask:
-			raise OverflowError('{} level bits insufficient to properly index tree'.format(self.ADDRESS_LEVEL_BITS))
-		d_level <<= (np.dtype(self.ADDRESS_DTYPE).itemsize * 8 - self.ADDRESS_LEVEL_BITS)
-
-
-
 		for i in range(1,self.q):#ignore the zeroth daughter of the root to enforce regularity of addressing
 			didx = (self.idx + i) % self.q
 			disom = self.isom.cross(generators[didx])
 			dcoord = disom.evaluate(0)
-			daddr = ((paddr if self.coords != 0j else self.ADDRESS_DTYPE(0)) & ~level_mask) << w | self.ADDRESS_DTYPE(i - 1)
-			daddr |= d_level
-			daddr = self.int_addr_to_succ(daddr)
 
-			self.d_coords.append((dcoord,didx,disom,daddr))
+			self.d_coords.append((dcoord,didx,disom))
 
 	def reset_flags(self):
 		super().reset_flags()
@@ -254,8 +157,7 @@ class HyperNode(TNNode):
 			if n.coords is None:
 				raise AttributeError("Tried to connect two nodes that weren't already in the network")
 			#make n our parent
-			self.coords, self.idx, self.isom, self.saddr = n.add_daughter(self)
-			# n.reset_search()#WHY was this being done?
+			self.coords, self.idx, self.isom = n.add_daughter(self)
 			self.calculate_daughter_coords()
 
 		self.neighbors.add(n)
@@ -277,13 +179,6 @@ class HyperNode(TNNode):
 	npaths variable tells us how many paths to find (we'll stop when we find this many or when we have found the max).
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
-	'''
-	def count_vd_paths_to_hyper_from_addr(self,dest_addr,max_paths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
-		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper(dest_coords,max_paths=max_paths,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
-
-	'''
-	this should technically be private access
 	'''
 	def count_vd_paths_to_hyper(self,dest_coords,max_paths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
 		self.search_blacklist_flag = True
@@ -350,14 +245,6 @@ class HyperNode(TNNode):
 	npaths variable tells us how many paths to find (we'll stop when we find this many or when we have found the max).
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
-	'''
-	def count_vd_paths_to_hyper_neighborbl_from_addr(self,dest_addr,max_dist_scale=float('inf'),stop_on_first_failure=False):
-		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper_neighborbl(dest_coords,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
-
-
-	'''
-	this should technically be private access, but speed dictates it not be
 	'''
 	def count_vd_paths_to_hyper_neighborbl(self,dest_coords,max_dist_scale=float('inf'),stop_on_first_failure=False):
 		st_dist = hyper_dist(self.coords,dest_coords)
@@ -433,23 +320,16 @@ class HyperNode(TNNode):
 	generally, each node asks its neighbors how many times they've been visited and prioritizes them based on the ones which have been visited the fewest times
 	"""
 
+	def get_num_times_visited(self):
+		self.operations_done += 1#this is why this method is important
+		return self.times_visited
+
 	'''
 	initialize the search
 
 	npaths variable tells us how many paths to find (we'll stop when we find this many or when we have found the max).
 	max distance scale tells us how far nodes are allowed to be from t, as a linear function of the distance between s and t
 		specifically, nodes that are further than max_dist_scale * (dist from s to t) are excluded
-	'''
-	def count_vd_paths_to_hyper_multivisit_from_addr(self,dest_addr,max_dist_scale=float('inf'),stop_on_first_failure=False):
-		dest_coords = addr_to_coords(self.q,dest_addr,self.ADDRESS_LEVEL_BITS)
-		return self.count_vd_paths_to_hyper_multivisit(dest_coords,max_dist_scale=max_dist_scale,stop_on_first_failure=stop_on_first_failure)
-
-	def get_num_times_visited(self):
-		self.operations_done += 1#this is why this method is important
-		return self.times_visited
-
-	'''
-	this should technically be private access, but speed dictates it not be
 	'''
 	def count_vd_paths_to_hyper_multivisit(self,dest_coords,max_dist_scale=float('inf'),stop_on_first_failure=False):
 		st_dist = hyper_dist(self.coords,dest_coords)
