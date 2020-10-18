@@ -24,7 +24,7 @@ Packets sent between s and t represent keyshares. Should we add an edge between 
 arguments are complex numbers
 '''
 def hyper_dist(a:complex,b:complex):
-	return np.arccosh(1 + (2*(abs(a-b)**2))/((1 - abs(a)**2)*(1 - abs(b)**2)))
+	return np.arccosh(1 + (2*(abs(a-b)**2))/((1 - abs(a)**2)*(1 - abs(b)**2)))#FIXME why is this taking so long? Maybe we should precalculate/cache all neighbor distances
 
 class Isometry:
 
@@ -70,9 +70,6 @@ def define_generators(q):
 
 class HyperNode(TNNode):
 
-	ADDRESS_DTYPE = np.int64
-	ADDRESS_LEVEL_BITS = 8#how many bits in the address are devoted to the level in the tree?
-
 	def __init__(self,node_id,q,coordinates=None,index=None,isometry=None):
 		super().__init__(node_id)
 		self.coords = coordinates
@@ -84,6 +81,9 @@ class HyperNode(TNNode):
 
 		self.neighbors = set()
 		self.daughters = set()
+
+		self.distances = {}#map (cache) certain nodes to distance to that node
+		#this causes hyper_dist to be called 40% as often -- ~1.1x speedup overall (impact of this function on the entire run is now halved)
 
 		self.d_add_search_flag = False
 
@@ -115,7 +115,7 @@ class HyperNode(TNNode):
 	def calculate_daughter_coords(self):
 		generators = define_generators(self.q)
 
-		for i in range(1,self.q):#ignore the zeroth daughter of the root to enforce regularity of addressing
+		for i in range(self.q):
 			didx = (self.idx + i) % self.q
 			disom = self.isom.cross(generators[didx])
 			dcoord = disom.evaluate(0)
@@ -126,11 +126,14 @@ class HyperNode(TNNode):
 		super().reset_flags()
 		self.d_add_search_flag = False
 		self.max_neighbor_called = -1
+		self.distances.clear()#just so the memory doesn't fill up. this is probably no bueno but since the target node changes all the time there's no use in remembering previous targets
 
 	'''
 	add this node as a daughter and give it the info it needs (coords, index, isometry)
 	'''
 	def add_daughter(self,d,visited=None):
+		if len(self.d_coords) == 0:
+			self.calculate_daughter_coords()  #only do this if/when we add a daughter
 		if visited is None:
 			visited = set()
 		if self in visited:
@@ -158,13 +161,24 @@ class HyperNode(TNNode):
 				raise AttributeError("Tried to connect two nodes that weren't already in the network")
 			#make n our parent
 			self.coords, self.idx, self.isom = n.add_daughter(self)
-			self.calculate_daughter_coords()
 
 		self.neighbors.add(n)
 		n.add_neighbor(self)#enforce reciprocity
 
 	def add_public_key_in_person(self,t_node):
 		self.add_neighbor(t_node)
+
+
+	'''
+	calculate the distance to this other node in the embedding space
+	'''
+	def dist_to(self,target_coords:complex):
+		if target_coords in self.distances:
+			return self.distances[target_coords]
+		else:
+			dist = hyper_dist(self.coords,target_coords)
+			self.distances.update({target_coords:dist})#this shouldn't get too big since we're only calculating distance to a small set of target nodes
+			return dist
 
 
 	"""
@@ -184,7 +198,7 @@ class HyperNode(TNNode):
 		self.search_blacklist_flag = True
 		st_dist = hyper_dist(self.coords,dest_coords)
 		#start a search to dest from each neighbor
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x: hyper_dist(x.coords,dest_coords)))
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x: x.dist_to(dest_coords)))
 		paths = []
 		for neighbor in neighbors_to_call:
 			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
@@ -224,7 +238,7 @@ class HyperNode(TNNode):
 		self.resetted_flag = False
 
 		#otherwise ask the *right* neighbor(s) if they know the muffin man
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x: x.dist_to(dest_coords)))
 		for neighbor in neighbors_to_call:
 			if hyper_dist(neighbor.coords,dest_coords) <= max_dist_scale * st_dist:
 				self.operations_done += 1
@@ -286,7 +300,7 @@ class HyperNode(TNNode):
 		self.resetted_flag = False
 
 		#otherwise ask the *right* neighbor(s) if they know the muffin man
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:hyper_dist(x.coords,dest_coords)))
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:x.dist_to(dest_coords)))
 		start_idx = self.max_neighbor_called + 1
 		for nidx in range(start_idx,len(neighbors_to_call)):
 			neighbor = neighbors_to_call[nidx]
@@ -373,7 +387,7 @@ class HyperNode(TNNode):
 		neighbors_blacklist_counts = {n:n.get_num_times_visited() for n in self.neighbors}
 		self.operations_done += len(self.neighbors)#send all of the blacklist-count requests
 		#primary sort is the blacklist count, secondary is distance to t
-		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:(neighbors_blacklist_counts[x],hyper_dist(x.coords,dest_coords))))
+		neighbors_to_call = list(sorted(list(self.neighbors),key=lambda x:(neighbors_blacklist_counts[x],x.dist_to(dest_coords))))
 		start_idx = self.max_neighbor_called + 1
 		for nidx in range(start_idx,len(neighbors_to_call)):
 			neighbor = neighbors_to_call[nidx]

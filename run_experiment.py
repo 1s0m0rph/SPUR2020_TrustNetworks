@@ -200,7 +200,7 @@ returns (mapping from metric string to tuple of mean and stdev)
 	optimal network usage (number of nodes) mean and standard deviation <only if "compare_to_opt" is true>
 	messages sent per node (among those that send messages) mean and standard deviation <only for decentralized algorithms>
 '''
-def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,sample_pair_proportion=1.,seed=None,max_npairs=float('inf'),progress_interval=0,compare_to_optimal=False,**kwargs):
+def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,sample_pair_proportion=1.,seed=None,max_npairs=float('inf'),compare_to_optimal=False,**kwargs):
 	np.random.seed(seed)
 	### SUMMARY STATS WILL BE CALCULATED ON THESE
 	num_paths_found_agg = []
@@ -224,13 +224,13 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 	nxG = convert_to_nx_graph(G)
 	Gp = None
 	if compare_to_optimal:
-		#calculate the v-d transform now
-		Gp = vertex_disjoint_transform(nx.DiGraph(nxG))
+		#calculate the residual network on the v-d transform now
+		Gp = nx.algorithms.flow.build_residual_network(vertex_disjoint_transform(nx.DiGraph(nxG)),'capacity')#shallow copy is fine
 
 	#do the pairs
 	pairs_run = 0
 	for s,t in pairs:
-		if (progress_interval != 0) and ((pairs_run % progress_interval) == 0):
+		if (PROGRESS_INTERVAL != 0) and ((pairs_run % PROGRESS_INTERVAL) == 0):
 			print('{} of {} pairs evaluated ({:.1f}%)'.format(pairs_run,npairs,100. * float(pairs_run) / float(npairs)))
 
 		exact_total_paths = 0
@@ -390,7 +390,7 @@ if __name__ == '__main__':
 	parser.add_argument('-p','--sample_pair_proportion',nargs=1,type=float,default=[1.0],help='What proportion of the possible pairs should be tested?')
 	parser.add_argument('-m','--max_npairs',nargs=1,type=float,default=[float('inf')],help='What is the maximum number of pairs to test for a given graph?')
 	parser.add_argument('-S','--no_show_graph_progress',default=False,action='store_true',help='Should we not show progress at the graph-testing level? (by default, we will)')
-	parser.add_argument('-i','--pair_progress_interval',nargs=1,type=int,default=[0],help="How often [after how many trials] should we show progress at the pair level? (default is zero; i.e. we dont' show progress at all)")
+	parser.add_argument('-i','--progress_interval',nargs=1,type=int,default=[0],help="How often [after how many trials] should we show progress at levels lower than graph? (default is zero; i.e. we dont' show progress at all)")
 	parser.add_argument('-c','--optimal_usage',default=False,action='store_true',help='Should we calculate the optimal network usage?')
 	parser.add_argument('-C','--validate_paths',default=False,action='store_true',help="Should we validate at every step that the paths returned are VD and correct?")
 	parser.add_argument('-M','--max_paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
@@ -424,7 +424,8 @@ if __name__ == '__main__':
 	show_graph_progress = not args.no_show_graph_progress
 	#end
 	#single pair args begin
-	sp_progress = args.pair_progress_interval[0]
+	global PROGRESS_INTERVAL
+	PROGRESS_INTERVAL = args.progress_interval[0]
 	compare_to_optimal = args.optimal_usage
 	validate_paths = args.validate_paths
 	output = args.output
@@ -451,7 +452,6 @@ if __name__ == '__main__':
 	runner_kwargs.update({'sample_pair_proportion':sample_pair_proportion,
 						  'max_npairs':max_npairs,
 						  'compare_to_optimal':compare_to_optimal,
-						  'progress_interval':sp_progress,
 						  })
 
 

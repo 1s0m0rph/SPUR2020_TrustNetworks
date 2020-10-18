@@ -54,16 +54,23 @@ def convert_nx_graph_to_TN(nxg:Union[nx.Graph,nx.DiGraph],node_type,*args,**kwar
 construct a (pre) ordering of the nodes in bfst
 '''
 def nx_bfs_tree_preordering_construct(nxg,G,idx_map):
+	global PROGRESS_INTERVAL
 	frontier = [0]#(arbitrarily?) choose root to be zero
 	G[frontier[0]].init_as_root()
 	# seen = {}#we'll use the search blacklist flag instead
+	gsize = len(nxg)
+	n_nodes_added = 0
+	if PROGRESS_INTERVAL != 0:
+		print('Constructing graph...')
 	#call on daughters
 	while len(frontier) > 0:
+		if (PROGRESS_INTERVAL != 0) and ((n_nodes_added % PROGRESS_INTERVAL) == 0):
+			print('{} of {} nodes added ({:.3f}%)'.format(n_nodes_added,gsize,100*(n_nodes_added/gsize)))
 		current = frontier.pop(0)
 
 		for n in nxg.neighbors(current):
 			ntn = G[idx_map[n]]
-			ntn.add_public_key_in_person(G[idx_map[current]])
+			G[idx_map[current]].add_public_key_in_person(ntn)
 			if not ntn.search_blacklist_flag:
 				frontier.append(n)
 				ntn.search_blacklist_flag = True
