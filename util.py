@@ -60,7 +60,7 @@ use max flow on a modified version of G to find the number of vertex disjoint pa
 
 between the transform and the actual max flow algorithm, on big graphs this can take a looooooooooong time to run
 
-cache the zero-flow residual network so nx doesn't have to calculate it every time (this results in a 4.2x speedup!)
+cache the zero-flow residual network so nx doesn't have to calculate it every time (this results in a 2.1x speedup!)
 '''
 def vertex_disjoint_paths(G:nx.Graph,s,t,retrace=False,Gp=None) -> Union[List,int]:
 	#first modify G so that two-in two-out motifs evaluate correctly

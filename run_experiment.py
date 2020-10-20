@@ -112,7 +112,6 @@ path alg possibilities:
 
 
 returns:
-	success: bool: true iff all paths found were valid and all paths found were VD. if validate_paths=False, this is always true. if no paths are found, this is always true
 	num_paths_found: how many paths did we find?
 	num_nodes_used: how many nodes had to *send a message* -- nothing else counts towards this
 	total_messages_sent: how many messages were sent?
@@ -124,7 +123,7 @@ does NOT return (i.e. these need to be calculated later):
 
 this function will reset the graph after calculating the needed quantities
 '''
-def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,s:int,t:int,validate_paths=True,verbose=False,**kwargs):
+def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,s:int,t:int,verbose=False,**kwargs):
 	paths = []
 	if vd_path_alg == 'only-opt':
 		return True,0,0,0#basically, running just the optimal lets us skip all of this
@@ -169,12 +168,6 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 	else:
 		raise AttributeError("Unknown experiment algorithm: {}, see documentation for run_experiment::run_single_pair".format(vd_path_alg))
 
-	valid = True
-	if validate_paths:
-		#make sure the paths are correct
-		valid = validate_returned_paths(G,paths,s,t,verbose=verbose)
-
-
 	#reset everything and tally up usage
 	operations_this_pair = 0
 	nodes_with_operations = 0
@@ -184,7 +177,7 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 			nodes_with_operations += 1
 		operations_this_pair += operations
 
-	return valid,len(paths),nodes_with_operations,operations_this_pair
+	return len(paths),nodes_with_operations,operations_this_pair
 
 '''
 As with run_single_pair, but this runs many and calculates summary stats for the metrics
@@ -237,16 +230,13 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:st
 		opt_num_nodes = 0
 		if compare_to_optimal:
 			exact_paths = vertex_disjoint_paths(nxG,s,t,retrace=True,Gp=Gp)
-			if validate_paths:
-				validate_returned_paths(G,exact_paths,s,t,verbose=True)
 			opt_num_nodes = sum([len(path)-1 for path in exact_paths]) + 1#don't count t for all of these -- just count it once
 			exact_total_paths = len(exact_paths)
 		else:
 			exact_total_paths = vertex_disjoint_paths(nxG,s,t,retrace=False)
 
 		#get the numbers for this pair
-		success,num_paths_found,num_nodes_used,num_messages_sent = run_single_pair(G,vd_path_alg,s,t,**kwargs)
-		#TODO do something with the success variable or get rid of it
+		num_paths_found,num_nodes_used,num_messages_sent = run_single_pair(G,vd_path_alg,s,t,**kwargs)
 
 		#throw them in the aggregators
 		num_paths_found_agg.append(num_paths_found)
@@ -392,7 +382,6 @@ if __name__ == '__main__':
 	parser.add_argument('-S','--no_show_graph_progress',default=False,action='store_true',help='Should we not show progress at the graph-testing level? (by default, we will)')
 	parser.add_argument('-i','--progress_interval',nargs=1,type=int,default=[0],help="How often [after how many trials] should we show progress at levels lower than graph? (default is zero; i.e. we dont' show progress at all)")
 	parser.add_argument('-c','--optimal_usage',default=False,action='store_true',help='Should we calculate the optimal network usage?')
-	parser.add_argument('-C','--validate_paths',default=False,action='store_true',help="Should we validate at every step that the paths returned are VD and correct?")
 	parser.add_argument('-M','--max_paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
 	parser.add_argument('-x','--max_dist_scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
 	parser.add_argument('-f','--stop_on_first_failure',default=False,action='store_true',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
@@ -427,7 +416,6 @@ if __name__ == '__main__':
 	global PROGRESS_INTERVAL
 	PROGRESS_INTERVAL = args.progress_interval[0]
 	compare_to_optimal = args.optimal_usage
-	validate_paths = args.validate_paths
 	output = args.output
 	if output is not None:
 		output = output[0]

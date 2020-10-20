@@ -212,7 +212,7 @@ class HyperNode(TNNode):
 					break
 
 		for neighbor in self.neighbors:
-			neighbor.reset_search()
+			neighbor.reset_search()#TODO replace with iteration one level above for speedy reasions
 
 		self.search_blacklist_flag = False
 
