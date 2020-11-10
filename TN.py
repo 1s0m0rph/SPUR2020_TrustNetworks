@@ -28,9 +28,6 @@ class TNNode:
 		# metrics
 		self.operations_done = 0  #how many messages have I had to *send* during the current run?#TODO rename this to messages_sent or something
 
-	def generate_keys(self):
-		self.public_key,self.private_key = rsa.newkeys(16)
-
 	def __repr__(self):
 		return 'Trust Network Node with ID {}'.format(self.id)
 
@@ -112,9 +109,7 @@ class TNNode:
 		
 		
 	def reset_all_and_return_ops(self):
-		self.pulse_pred = {}
-		self.resetted_flag = False
-		self.search_blacklist_flag = False
+		self.reset_flags()
 		ops = self.operations_done
 		self.operations_done = 0
 		return ops

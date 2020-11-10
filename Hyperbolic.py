@@ -211,11 +211,6 @@ class HyperNode(TNNode):
 				elif stop_on_first_failure:
 					break
 
-		for neighbor in self.neighbors:
-			neighbor.reset_search()#TODO replace with iteration one level above for speedy reasions
-
-		self.search_blacklist_flag = False
-
 		return paths
 
 	def gnh_interm(self,dest_coords,pred,st_dist,max_dist_scale):
@@ -273,8 +268,6 @@ class HyperNode(TNNode):
 			elif stop_on_first_failure:
 				break
 
-		self.reset_search()
-
 		#now calculate a graph union among all the candidate paths and use that to do a strict max flow
 		if len(candidate_paths) > 0:
 			paths = vd_paths_from_candidates(candidate_paths,self,candidate_paths[0][-1])
@@ -289,7 +282,7 @@ class HyperNode(TNNode):
 			#blacklist nodes on this path
 			self.pulse_pred.update({pulse_num:pred})
 			self.resetted_flag = False
-			path = self.neighbor_blacklist_zip(pulse_num,[])
+			path = self.neighbor_blacklist_zip(pulse_num)
 			return path
 
 		if pulse_num in self.pulse_pred:
@@ -316,16 +309,18 @@ class HyperNode(TNNode):
 		return None
 
 	'''
-	I am on the path to dest from s, so I need to be blacklisted
-
-	this method also reconstructs the path
+	reconstruct the path from s to t backwards and blacklist the nodes on it
+	
+	iterative now to avoid recursion depth limits
 	'''
-	def neighbor_blacklist_zip(self,pulse_num,path: list):
-		if (pulse_num not in self.pulse_pred) or (self.pulse_pred[pulse_num] is None):
-			return path#drop the first one (s)
+	def neighbor_blacklist_zip(self,pulse_num):
+		path = []
+		current = self
+		while (pulse_num not in current.pulse_pred) or (current.pulse_pred[pulse_num] is None):
+			path = [current] + path
+			current = current.pulse_pred[pulse_num]
 
-		self.operations_done += 1#in order to retrace these paths we need to send another message
-		return self.pulse_pred[pulse_num].neighbor_blacklist_zip(pulse_num,[self] + path)
+		return path
 
 
 	"""
@@ -357,8 +352,6 @@ class HyperNode(TNNode):
 				candidate_paths.append([self] + path_ret)
 			elif stop_on_first_failure:
 				break
-
-		self.reset_search()
 
 		#now calculate a graph union among all the candidate paths and use that to do a strict max flow
 		if len(candidate_paths) > 0:

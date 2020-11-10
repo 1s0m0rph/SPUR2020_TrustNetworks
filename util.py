@@ -3,6 +3,9 @@ import networkx as nx
 import re
 import scipy.stats
 from typing import List, Union
+import sys
+
+# sys.setrecursionlimit(10000)#big graphs require this
 
 PROGRESS_INTERVAL = 0
 
@@ -69,7 +72,7 @@ def vertex_disjoint_paths(G:nx.Graph,s,t,retrace=False,Gp=None) -> Union[List,in
 	#else reset (doesn't need to be done since the networkx functions all do that for us)
 	#then run max flow on that graph with the caveat that if we used the fork node transform on s we need to change the start to s
 	if 'f{}'.format(s) in Gp.nodes:
-		s = 'f{}'.format(s)
+		s = 'f{}'.format(s)#FIXME is this actually causing us to start at the right node?
 
 	R = nx.algorithms.flow.preflow_push(Gp,s,t,residual=Gp)#TODO maybe more optimizations here -- still looking at 67% of the time being spent in this fn
 	if retrace:
@@ -103,7 +106,8 @@ def retrace_max_flow_paths(R:nx.DiGraph,s,t) -> List:
 		#add on all neighbors *with flow == 1*
 		for neigh in R.neighbors(current):
 			if (neigh not in seen) and (neigh not in in_path) and (R[current][neigh]['flow'] > 0):
-				paths[-1].append(neigh)#no need for predecessors since we're being greedu
+				if (type(neigh) != str) or (neigh[0] != 'f'):#fork nodes should not be in paths since they only exist in the augmented network
+					paths[-1].append(neigh)#no need for predecessors since we're being greedy
 				exp_q.append(neigh)
 				seen.add(neigh)
 				break#small optimization
@@ -113,7 +117,7 @@ def retrace_max_flow_paths(R:nx.DiGraph,s,t) -> List:
 '''
 traverse the predecessor map to figure out a single path
 '''
-def retrace_single_path(pred,current,path=None) -> list:
+def retrace_single_path(pred,current,path=None) -> list:#TODO remove deprecated
 	if path is None:
 		path = []
 	if pred[current] is None:
