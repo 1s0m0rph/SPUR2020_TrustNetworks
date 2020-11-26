@@ -28,6 +28,9 @@ class TNNode:
 		# metrics
 		self.operations_done = 0  #how many messages have I had to *send* during the current run?#TODO rename this to messages_sent or something
 
+		self.address = None#and will stay that way unless annotated by an Embedder
+		self.adist = None#this is just the distance function provided by an Embedder
+
 	def __repr__(self):
 		return 'Trust Network Node with ID {}'.format(self.id)
 
@@ -182,6 +185,61 @@ class TNNode:
 		#call pred tree clean on all successors
 		for succ in successors:
 			succ.pred_tree_clean()
+
+
+	def vertex_blacklist_search_greedy(self,target_addr,max_paths=float('inf'),max_dist_scale=float('inf'),stop_on_first_failure=False):
+		if self.address is None:
+			raise TypeError("Trying to run a greedy search on a graph which has not been completely addressed")
+
+		self.search_blacklist_flag = True
+		st_dist = self.adist(self.address,target_addr)
+		max_dist = st_dist*max_dist_scale
+
+		#begin the search
+		neighbors_to_call = sorted([(self.adist(n.address,target_addr),n) for n in self.neighbors],key=lambda x: x[0])
+		paths = []
+		for dist,neighbor in neighbors_to_call:
+			if dist <= max_dist:
+				self.operations_done += 1
+				path_ret = neighbor.vertex_bl_greedy_interm(target_addr,self,max_dist,stop_on_first_failure)
+				if path_ret is not None:
+					paths.append(path_ret)
+					if len(paths) > max_paths:
+						break
+				elif stop_on_first_failure:
+					break
+
+		return paths
+
+	def vertex_bl_greedy_interm(self,target_addr,pred,max_dist,stop_on_first_failure):
+		if self.address == target_addr:
+			self.pulse_pred.update({-1:pred})
+			self.resetted_flag = False
+			self.search_blacklist_flag = False
+			path = self.v2_vd_blacklist_zip(-1,[])
+			return path
+
+		if -1 in self.pulse_pred:
+			return None
+
+		if self.search_blacklist_flag:
+			return None
+
+		self.pulse_pred.update({-1:pred})
+		self.resetted_flag = False
+
+		neighbors_to_call = sorted([(self.adist(n.address,target_addr),n) for n in self.neighbors],key=lambda x: x[0])
+		for dist,neighbor in neighbors_to_call:
+			if dist <= max_dist:
+				self.operations_done += 1
+				path_ret = neighbor.vertex_bl_greedy_interm(target_addr,self,max_dist,stop_on_first_failure)
+				if path_ret is not None:
+					return path_ret
+				#TODO does it make sense to propagate this?
+				elif stop_on_first_failure:#small algorithm change: propagate this
+					return None
+
+		return None
 
 def convert_to_nx_graph(TNG,graph_type=nx.DiGraph):
 	nxG = graph_type()

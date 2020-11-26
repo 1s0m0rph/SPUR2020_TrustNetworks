@@ -1,13 +1,21 @@
 import numpy as np
+import random
 import networkx as nx
 import re
 import scipy.stats
-from typing import List, Union
-import sys
+from typing import List, Union, Tuple
+# import sys
 
 # sys.setrecursionlimit(10000)#big graphs require this
 
 PROGRESS_INTERVAL = 0
+
+def is_iterable(t):
+	try:
+		x = iter(t)
+	except TypeError:
+		return False
+	return True
 
 '''
 'add one' (LE) to the set (thinking of it is a bitvector/binary set)
@@ -470,3 +478,19 @@ def read_graph_from_data(_,filename) -> nx.Graph:
 	G = nx.read_edgelist(filename,create_using=nx.Graph,delimiter=',',nodetype=int)
 	assert(nx.is_connected(G))#if not this won't work
 	return G
+
+def type_check(obj,t):
+	if is_iterable(obj) and is_iterable(t):
+		for et,at in zip(t,obj):
+			if is_iterable(et):
+				if type(at) not in et:
+					raise TypeError("Expected address type {}, got {}".format(et,at))
+			else:
+				if et != type(at):
+					raise TypeError("Expected address type {}, got {}".format(et,at))
+	elif type(obj) != t:
+		if is_iterable(t):
+			if type(obj) not in t:
+				raise TypeError("Expected address type {}, got {}".format(et,at))
+		else:
+			raise TypeError("Expected address type {}, got {}".format(t, type(obj)))

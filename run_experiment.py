@@ -32,6 +32,7 @@ from Hyperbolic import *
 from stepper_sim import *
 import argparse
 import os.path
+from Embedding import *
 
 SYNCHRONIZED_PATH_ALGS = ['synch-v2']
 
@@ -39,26 +40,36 @@ DECENTRALIZED_PATH_ALGS = ['TN-v2',
 						   'synch-v2',
 						   'hyper',
 						   'hyper-neigh',
-						   'hyper-multi']
+						   'hyper-multi',
+						   'n-adic']
 
 HYPER_EMBED_PATH_ALGS = ['hyper',
 						 'hyper-neigh',
 						 'hyper-multi']
+
+EMBED_PATH_ALGS = ['hyper',#these use the Embedding class
+				   'n-adic']
+
+EMBED_ALGS = {'hyper':'hyperbolic',
+			  'n-adic':'n-adic'
+			  }
 
 CENTRALIZED_PATH_ALGS = ['only-opt','local-mf']
 
 ALL_PATH_ALGS = DECENTRALIZED_PATH_ALGS + CENTRALIZED_PATH_ALGS
 
 #inverse map from algorithms to the options they can use (that is, maps options to the algorithms that use them)
-PATH_ALGS_OPTIONS_USED_INV = {'max_paths':['hyper'],
-							  'max_dist_scale':['hyper','hyper-neigh','hyper-multi'],
-							  'stop_on_first_failure':['hyper','hyper-neigh','hyper-multi'],#TODO add this option for TN-v2?
+PATH_ALGS_OPTIONS_USED_INV = {'max_paths':['hyper','n-adic'],
+							  'max_dist_scale':['hyper','hyper-neigh','hyper-multi','n-adic'],
+							  'stop_on_first_failure':['hyper','hyper-neigh','hyper-multi','n-adic'],#TODO add this option for TN-v2?
 							  #TODO add TTL
 							  }
 
 PATH_ALGS_NODE_TYPE = {x:TNNode for x in ALL_PATH_ALGS}#by default everything uses TNNodes
 PATH_ALGS_NODE_TYPE.update({x:TNNode_Stepper for x in SYNCHRONIZED_PATH_ALGS})
 PATH_ALGS_NODE_TYPE.update({x:HyperNode for x in HYPER_EMBED_PATH_ALGS})
+PATH_ALGS_NODE_TYPE.update({x:TNNode for x in EMBED_PATH_ALGS})
+
 
 '''
 helper function for later things -- just pulling the code out of a later function here
@@ -103,11 +114,12 @@ Run vd_path_alg on G from s to t
 path alg possibilities:
 	'TN-v2':	 		TNNode.count_vd_paths_to_v2(destination id, return paths = True)
 	'synch-v2':			TNNode_Stepper.count_vd_paths_to_v2(destination id, return paths = True, TTL = infinity)
-	'hyper':			HyperNode.count_vd_paths_to_hyper(dest coordinates, npaths=inf, max distance scale = inf, stop on first fail = false)
+	'hyper':			TNNode.vertex_blacklist_search_greedy(dest coordinates, npaths=inf, max distance scale = inf, stop on first fail = false)
 	'hyper-neigh':		HyperNode.count_vd_paths_to_hyper_neighborbl(dest coordinates, max distance scale = inf, stop on first fail = false)
 	'hyper-multi':		HyperNode.count_vd_paths_to_hyper_multivisit(dest coords, max dist scale = inf, stop on first fail = false)
 	'local-mf':			hyper_VD_paths_local(hyperbolic graph, start, target, max distance scale = inf, distance measure = 'path', autoscale increment = none)
 	'only-opt':			vertex_disjoint_paths(nx graph, start, target)
+	'n-adic':			TNNode.vertex_blacklist_search_greedy(dest coordinates, npaths=inf, max distance scale = inf, stop on first fail = false)
 	(+more as they are added)
 
 
@@ -147,9 +159,7 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 		G[s].cleanup()
 		paths = G[s].paths
 	elif vd_path_alg == 'hyper':
-		if type(G[0]) != HyperNode:
-			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
-		paths = G[s].count_vd_paths_to_hyper(G[t].coords,**kwargs)
+		paths = G[s].vertex_blacklist_search_greedy(G[t].address,**kwargs)
 	elif vd_path_alg == 'hyper-neigh':
 		if type(G[0]) != HyperNode:
 			raise AttributeError("Hyperbolic embedding algorithms can only be run on HyperNodes")
@@ -164,6 +174,8 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 		#we don't verify with this method since it doesn't return paths
 		num_paths_found, num_nodes_used = hyper_VD_paths_local(G,s,t,**kwargs)
 		return num_paths_found,num_nodes_used,0#message send calculation isn't done here since this is centralized
+	elif vd_path_alg == 'n-adic':
+		paths = G[s].vertex_blacklist_search_greedy(G[t].address,**kwargs)
 	#ADD NEW ALGORITHM PATH GENERATION SEMANTTICS HERE
 	else:
 		raise AttributeError("Unknown experiment algorithm: {}, see documentation for run_experiment::run_single_pair".format(vd_path_alg))
@@ -292,7 +304,8 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,s
 			print('Starting graph {} of {}'.format(ndone+1,len(graph_sizes)))
 		#generate the graph
 		generator_args = [size] + list(generator_args)#size must be dynamic, so it isn't already a part of the generator args
-		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],generator_args,generator_kwargs,node_args,node_kwargs)
+		embed_alg = EMBED_ALGS[vd_path_alg] if vd_path_alg in EMBED_ALGS else None
+		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],embed_alg,generator_args,generator_kwargs,node_args,node_kwargs)
 		generator_args = generator_args[1:]#remove this size so that the next size calls the generator correctly
 		rmp_ret = run_many_pairs(G,vd_path_alg,**runner_kwargs)
 
