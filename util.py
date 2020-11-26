@@ -491,6 +491,6 @@ def type_check(obj,t):
 	elif type(obj) != t:
 		if is_iterable(t):
 			if type(obj) not in t:
-				raise TypeError("Expected address type {}, got {}".format(et,at))
+				raise TypeError("Expected address type {}, got {}".format(t,obj))
 		else:
 			raise TypeError("Expected address type {}, got {}".format(t, type(obj)))

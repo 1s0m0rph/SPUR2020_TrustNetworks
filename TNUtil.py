@@ -15,20 +15,20 @@ algorithm should produce an nx graph which we will then turn into a TN graph
 
 we have multiple args/kwargs pairs so unfortunately they need to be done all fudge-like like this
 '''
-def generate_random_graph(algorithm,node_type,embedding_algorithm:str,algorithm_args=(),algorithm_kwargs=None,node_args=(),node_kwargs=None) -> List[TNNode]:
+def generate_random_graph(algorithm,node_type,embedding_algorithm:str,embed_dgr,algorithm_args=(),algorithm_kwargs=None,node_kwargs=None) -> List[TNNode]:
 	if node_kwargs is None:
 		node_kwargs = {}
 	if algorithm_kwargs is None:
 		algorithm_kwargs = {}
 	nxG = algorithm(*algorithm_args,**algorithm_kwargs)
-	tnG = convert_nx_graph_to_TN(nxG,node_type,embedding_algorithm,*node_args,**node_kwargs)
+	tnG = convert_nx_graph_to_TN(nxG,node_type,embedding_algorithm,embed_dgr,**node_kwargs)
 	return tnG
 
 
 '''
 convert a given networkx graph or digraph to a list of TNNodes (or subclasses) that are the same graph
 '''
-def convert_nx_graph_to_TN(nxg:Union[nx.Graph,nx.DiGraph],node_type,embedding_algorithm,*args,**kwargs) -> List[TNNode]:
+def convert_nx_graph_to_TN(nxg:Union[nx.Graph,nx.DiGraph],node_type,embedding_algorithm,embed_dgr,**kwargs) -> List[TNNode]:
 	retG = []
 	nodes = list(nxg.nodes)
 	idx_map = {node:i for i,node in enumerate(nodes)}#maps node names from the original graph onto indexes in retG
@@ -41,13 +41,13 @@ def convert_nx_graph_to_TN(nxg:Union[nx.Graph,nx.DiGraph],node_type,embedding_al
 			for neighbor in nxg.neighbors(node):
 				retG[i].add_public_key_in_person(retG[idx_map[neighbor]])
 	#nodes require additional parameters to construct
-	elif node_type == HyperNode:
-		retG = [node_type(i,*args,**kwargs) for i in range(len(nodes))]
+	elif node_type == HyperNode:#TODO remove this
+		retG = [node_type(i,**kwargs) for i in range(len(nodes))]
 
 		#hyperbolic graphs must be built in a specific order (treelike) -- use a BFS tree to construct
 		retG = nx_bfs_tree_preordering_construct(nxg,retG,idx_map)
 	if embedding_algorithm is not None:
-		embedder = get_embedder(embedding_algorithm)(*args,**kwargs)
+		embedder = get_embedder(embedding_algorithm)(embed_dgr,**kwargs)
 		retG = embedder.address_graph(retG)
 
 

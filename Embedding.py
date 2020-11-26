@@ -186,7 +186,7 @@ class Hyperbolic_Embedder(TreeEmbedder):
 
 
 
-class NAdic(TreeEmbedder):
+class NAdic_Embedder(TreeEmbedder):
 
 	def __init__(self,n):
 		super().__init__("n-adic",n_adic,n_adic)
@@ -201,124 +201,238 @@ class NAdic(TreeEmbedder):
 		return adr.children()
 
 	def __grt__(self):
-		return n_adic(1,self.n,0,reduce=False,cache=False)
+		return n_adic(1,self.n,0,n_adic_reduce=False)
 
 
-class n_adic:
+def long_divide(a,b):
+	q = a//b
+	adiffr0 = a - q*b
+	adiff0 = abs(adiffr0)
+	adiffr1 = adiffr0 - b
+	adiff1 = abs(adiffr1)
+	if adiff0 < adiff1:
+		return q,adiffr0
+	else:
+		return q+1,adiffr1
+
+def ext_eucl_int(a:int,b:int,gcd_only=False):
+	if a == 0:
+		return b
+	if b == 0:
+		return a
+	carda = (1,0)
+	cardb = (0,1)
+
+	q,r = long_divide(a,b)
+	cardc = (carda[0] - (q*cardb[0]),carda[1] - (q*cardb[1]))
+	carda = cardb
+	cardb = cardc
+	a = b
+	b = r
+
+	while r != 0:
+		q, r = long_divide(a, b)
+		cardc = (carda[0]-(q*cardb[0]), carda[1]-(q*cardb[1]))
+		carda = cardb
+		cardb = cardc
+		a = b
+		b = r
+
+	if a < 0:
+		a = -a
+		carda = (-carda[0],-carda[1])
+
+	if gcd_only:
+		return a
+	else:
+		return a,carda
+
+def gcd(a:int,b:int):
+	return ext_eucl_int(a,b,gcd_only=True)
+
+class Rational:
+	"""
+	a rational number a/b where a and b are coprime* integers (b = 0 is thought of as being infinite)
+	
+	* iff rat_reduce is set to true
+	"""
+
+	def __init__(self,a:int,b:int,rat_reduce=True):
+		if rat_reduce:
+			g = gcd(a,b)
+			a //= g
+			b //= g
+
+		self.numerator = a
+		self.b = b
+		
+	def pairwise_check(self,other):
+		if type(other) in [int,np.int32,np.int64]:
+			other = Rational(other,1,rat_reduce=False)
+		elif type(other) in [float,np.float64]:
+			other = continued_frac_approx_convergents(other)[-1]
+		return other
+
+	def __add__(self, other):
+		other = self.pairwise_check(other)
+		return Rational(self.numerator*other.b+other.numerator*self.b,self.b*other.b,rat_reduce=True)
+
+	def __neg__(self):
+		return Rational(-self.numerator,self.b)
+
+
+	def __sub__(self, other):
+		return self+(-other)
+
+	def __mul__(self, other):
+		other = self.pairwise_check(other)
+		return Rational(self.numerator*other.numerator,self.b*other.b,rat_reduce=True)
+
+	def __abs__(self):
+		return Rational(abs(self.numerator),abs(self.b))
+
+	def __repr__(self):
+		if self.b == 0:
+			return ("-" if self.numerator < 0 else "")+"INF"
+		return "{}/{}".format(self.numerator,self.b)
+
+	"""
+	called with the unary "~" operator
+	"""
+	def __invert__(self):
+		return Rational(self.b,self.numerator)
+
+	def __truediv__(self, other):
+		return self * (~other)
+
+	def __floordiv__(self, other):
+		return self / other
+
+	def __le__(self, other):
+		other = self.pairwise_check(other)
+		diff = self - other
+		return diff.numerator <= 0
+
+	def __eq__(self, other):
+		other = self.pairwise_check(other)
+		return (self.numerator == other.numerator) and (self.b == other.b)
+
+	def __lt__(self, other):
+		return (self <= other) and (self != other)
+
+	def __gt__(self, other):
+		return not (self <= other)
+
+	def __ge__(self, other):
+		return not (self < other)
+
+
+class n_adic(Rational):
 	"""
 	d = None is taken to mean d = -inf (denom = 0 or x = inf)
 	"""
 
 
-	'''
-	cache can be any of 'all','chld','denom',(anything else results in no caching)
-	'''
-	def __init__(self, a: int, n: int, d, reduce=True, cache=False):
+	def __init__(self,a:int,n: int,d,n_adic_reduce=True):
 		assert ((d is None) or (type(d) == int))
-		if reduce:
-			while (a%n) == 0:
+		if n_adic_reduce:
+			while ((a%n) == 0) and (d > 0):
 				a //= n
 				d -= 1
-		self.a = a
+		self.numerator = a
 		self.n = n
-		self.d = d
-		self.cache = cache
-
+		self.exp = d
 
 		if d is None:
-			self.chld = []
-			self.truedenom = 0
+			super().__init__(a,0,rat_reduce=False)
 		else:
-			self.chld = None
-			self.truedenom = None
-
+			super().__init__(a,n**d,rat_reduce=False)
 
 	def __add__(self, other):
-		if self.d > other.d:
-			oscale = self.n**(self.d-other.d)
+		other = self.pairwise_check(other)
+		if self.exp is None:
+			if (other.exp is None) and (((self.numerator < 0) and (other.numerator > 0)) or ((self.numerator > 0) and (other.numerator < 0))):
+				raise ZeroDivisionError("INF + (-INF) is indeterminate")
+			return self
+		if other.exp is None:
+			return other
+		if self.exp > other.exp:
+			oscale = self.n**(self.exp-other.exp)
 			sscale = 1
-		elif other.d > self.d:
+		elif other.exp > self.exp:
 			oscale = 1
-			sscale = self.n**(other.d-self.d)
+			sscale = self.n**(other.exp-self.exp)
 		else:
 			oscale = sscale = 1
-		return n_adic(self.a*sscale+other.a*oscale, self.n, max(self.d, other.d), reduce=True,cache=self.cache)
+		return n_adic(self.numerator*sscale+other.numerator*oscale,self.n,max(self.exp,other.exp),n_adic_reduce=True)
+
+	def __mul__(self, other):
+		other = self.pairwise_check(other)
+		#(a/n^d)*(b/n^e) = (ab)/(n^(d+e))
+		return n_adic(self.numerator*other.numerator,self.n,self.exp+other.exp,n_adic_reduce=True)
 
 	def __neg__(self):
-		return n_adic(-self.a, self.n, self.d, reduce=False,cache=self.cache)
-
-	def __sub__(self, other):
-		return self+(-other)
+		return n_adic(-self.numerator,self.n,self.exp,n_adic_reduce=False)
 
 	def __eq__(self, other):
-		return (self.n == other.n) and (self.a == other.a) and (self.d == other.d)
+		return (self.n == other.n) and (self.numerator == other.numerator) and (self.exp == other.exp)
 
 	def __abs__(self):
-		return n_adic(abs(self.a), self.n, self.d, reduce=False,cache=self.cache)
+		return n_adic(abs(self.numerator),self.n,self.exp,n_adic_reduce=False)
+
+	def pairwise_check(self,other):
+		if type(other) in [int,np.int32,np.int64]:
+			other = n_adic(int(other),self.n,0)
+		elif type(other) in [float,np.float64]:
+			other = continued_frac_nadic_approx(other,self.n)
+		return other
 
 	def children(self):
-		if self.chld is not None:
-			return self.chld.copy()
-		chdenom = self.d+1
+		chdenom = self.exp+1
 		chld = []
-		for chnum in range(self.n*(self.a-1)+1, self.n*self.a):
-			chld.append(n_adic(chnum, self.n, chdenom, reduce=False,cache=self.cache))
-		if self.cache:
-			self.chld = chld
-		return chld.copy()
+		for chnum in range(self.n*(self.numerator-1)+1,self.n*self.numerator):
+			chld.append(n_adic(chnum,self.n,chdenom,n_adic_reduce=False))
+		return chld
 
 	def is_ancestor_of(self, other):
 		if self == other:
 			return True
-		if self.d >= other.d:
+		if self.exp >= other.exp:
 			return False
 		#just need to check the main condition now
-		scale = self.n**(other.d-self.d)
-		rbound = scale*self.a
-		if other.a >= rbound:
+		scale = self.n**(other.exp-self.exp)
+		rbound = scale*self.numerator
+		if other.numerator >= rbound:
 			return False
 		lbound = rbound-scale
-		return other.a >= lbound
+		return other.numerator >= lbound
 
 	'''
 	this version is ancestor-weighted ONLY (i.e. not descendant-weighted)
 	'''
-
 	def dist_to(self, other):
 		raw_dist = abs(self-other)
 		if self.is_ancestor_of(other):
 			return raw_dist
 		else:
-			return raw_dist+n_adic(1, self.n, 0, reduce=False,cache=self.cache)
+			return raw_dist+n_adic(1,self.n,0,n_adic_reduce=False)
 
 	'''
 	this is the descendent-ancestor weighted metric
 	'''
 	def dist_to_DA(self, other):
 		if self == other:  #both descendant and ancestor case
-			return -n_adic(1, self.n, None, reduce=False,cache=self.cache)  #take this to mean (negative) infinity
+			return -n_adic(1,self.n,None,n_adic_reduce=False)  #take this to mean (negative) infinity
 		s_anc_o = self.is_ancestor_of(other)
 		o_anc_s = other.is_ancestor_of(self)
 		#we know that not both of these ^^ are true at this point
 		if s_anc_o:
-			return self.d-other.d  #-(e-d)
+			return n_adic(self.exp-other.exp,self.n,0,n_adic_reduce=False)  #-(e-d)
 		elif o_anc_s:
-			return other.d-self.d  #-(d-e)
+			return n_adic(other.exp-self.exp,self.n,0,n_adic_reduce=False)  #-(d-e)
 		else:
 			raw_dist = abs(self-other)
 			return raw_dist
-
-	def __repr__(self):
-		if self.truedenom == 0:
-			return ("-" if self.a < 0 else "")+"INF"
-		tdenom = None
-		if self.truedenom is not None:
-			tdenom = self.truedenom
-		elif self.cache:
-			self.truedenom = self.n**self.d
-		else:
-			tdenom = self.n**self.d
-		return "{}/{}".format(self.a, tdenom)
 
 
 def lnat_inner(x, max_depth, depth=0):
@@ -338,6 +452,75 @@ def lnat_inner(x, max_depth, depth=0):
 	s += ']\n'
 	return s
 
+def eval_convergents(cidxs:List[int]):
+	res = Rational(cidxs[-1],1)
+	for cidx in cidxs[-2::-1]:
+		res = ~res
+		res += cidx
+	return res
+
+def continued_frac_convergents(r_inp:Rational) -> List[Rational]:
+	#TODO is there a faster way than just brute forcing the actual convergents?
+	r = abs(r_inp)
+	i = r.numerator//r.b
+	cidxs = [i]
+	convs = [Rational(i,1)]
+	rem = r - i
+	while rem.numerator > 1:
+		i = rem.b//rem.numerator
+		rem = Rational(rem.b%rem.numerator,rem.numerator)
+		cidxs.append(i)
+		conv = eval_convergents(cidxs)
+		convs.append(conv)
+	convs.append(r)
+	return convs
+
+def continued_frac_approx_convergents(x:Union[float,np.float64],w=100) -> List[Rational]:
+	if not np.isfinite(x):
+		return [Rational(int(np.sign(x)),0)]
+	#first generate a totally brain-dead guess (i.e. <integer part of x> + <rational part of x>*2^w / 2^w
+	i = int(x)
+	ratxnum = int((x-i)*(2**w))
+	if ratxnum == 0:
+		return [Rational(i,1)]
+	rat = Rational(ratxnum,1<<w) + i
+	convs = continued_frac_convergents(rat)
+	return convs
+
+'''
+w is the truncation width for the rational part of x
+'''
+def continued_frac_nadic_approx(x:Union[float,np.float64],n:int,w=100) -> n_adic:
+	convs = continued_frac_approx_convergents(x,w)
+	if convs[0].b == 1:
+		if len(convs) != 1:
+			convs = convs[1:]#drop things like /1 and what not
+	if convs[0].b == 0:
+		return n_adic(convs[0].numerator,n,0)
+	if len(convs) == 1:
+		return n_adic(convs[0].numerator,n,int(np.round(np.log(convs[0].b)/np.log(n))))
+
+
+	#pick the closest one to some a/n^d with d < max_n_exp
+	#this amounts to picking the one whose denom is closest to a power of n
+	#which amounts to picking the one which has log_n(denom) closest to an integer (which will be d)
+	lscale = 1/np.log(n)
+	res_opt = np.log(convs[0].b)*lscale
+	resd = int(np.round(res_opt))
+	resn = convs[0].numerator
+	res_opt = abs(res_opt - resd)
+	for conv in convs[1:]:
+		opt = np.log(conv.b)*lscale
+		vd = int(np.round(opt))
+		vn = conv.numerator
+		opt = abs(opt - vd)
+		if opt <= res_opt:
+			resd = vd
+			resn = vn
+			res_opt = opt
+
+	return n_adic(resn,n,resd)
+
 
 def latex_n_adic_tree(n, depth):
 	s = '\\Tree'
@@ -350,4 +533,4 @@ def get_embedder(etype: str):
 	if etype == 'hyperbolic':
 		return Hyperbolic_Embedder
 	elif etype == 'n-adic':
-		return n_adic
+		return NAdic_Embedder

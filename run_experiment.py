@@ -52,7 +52,7 @@ EMBED_PATH_ALGS = ['hyper',#these use the Embedding class
 
 EMBED_ALGS = {'hyper':'hyperbolic',
 			  'n-adic':'n-adic'
-			  }
+			  }#TODO implement the rest of the hyper algs in the high level code
 
 CENTRALIZED_PATH_ALGS = ['only-opt','local-mf']
 
@@ -213,6 +213,7 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]], vd_path_alg:s
 	num_nodes_used_agg = []
 	optimal_usage_agg = []
 	messages_sent_per_node_used_agg = []
+	#TODO add actual path length metrics
 	###
 
 	#how many pairs could we do?
@@ -290,7 +291,7 @@ GRAPH_TYPES = list(GRAPH_FNS.keys())
 '''
 Using the same graph generation algorithm, calculate all the numbers we want for many different sizes of graphs
 '''
-def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,show_progress=True,generator_args=(),generator_kwargs=None,node_args=(),node_kwargs=None,runner_kwargs=None):
+def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,embed_dgr:str,show_progress=True,generator_args=(),generator_kwargs=None,node_kwargs=None,runner_kwargs=None):
 	if node_kwargs is None:
 		node_kwargs = {}
 	if generator_kwargs is None:
@@ -304,8 +305,8 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,s
 			print('Starting graph {} of {}'.format(ndone+1,len(graph_sizes)))
 		#generate the graph
 		generator_args = [size] + list(generator_args)#size must be dynamic, so it isn't already a part of the generator args
-		embed_alg = EMBED_ALGS[vd_path_alg] if vd_path_alg in EMBED_ALGS else None
-		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],embed_alg,generator_args,generator_kwargs,node_args,node_kwargs)
+		embed_algorithm = EMBED_ALGS[vd_path_alg] if vd_path_alg in EMBED_PATH_ALGS else None
+		G = generate_random_graph(generator,PATH_ALGS_NODE_TYPE[vd_path_alg],embed_algorithm,embed_dgr,generator_args,generator_kwargs,node_kwargs)
 		generator_args = generator_args[1:]#remove this size so that the next size calls the generator correctly
 		rmp_ret = run_many_pairs(G,vd_path_alg,**runner_kwargs)
 
@@ -390,6 +391,8 @@ if __name__ == '__main__':
 	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
 	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=None,help="First graph generator argument (for ER graphs, this is the average degree, for directeds it's approximate reciprocity, for variable density, this is the scale)")
 	parser.add_argument('-1','--graph_arg_1',nargs=1,type=str,default=None,help="Second graph generator argument (for variable density, this is the name of the function (see util::generate_connected_variable_dense_ER_graph))")
+	parser.add_argument('-e','--embedding_degree',nargs=1,type=int,default=[3],
+						help="What degree should the embed addressing tree be? This must be at least 2.")
 	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
 	parser.add_argument('-l','--min_graph_size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
 	parser.add_argument('-b','--max_graph_size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
@@ -403,7 +406,6 @@ if __name__ == '__main__':
 	parser.add_argument('-M','--max_paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
 	parser.add_argument('-x','--max_dist_scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
 	parser.add_argument('-f','--stop_on_first_failure',default=False,action='store_true',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
-	parser.add_argument('-q','--hyper_embed_degree',nargs=1,type=int,default=[3],help="What degree should the hyperbolic embed addressing tree be? This must be one more than a power of two (i.e. 3,5,9,17...)")
 	parser.add_argument('-o','--output',nargs=1,type=str,default=None,help="What file should we output to? (defaults to stdout)")
 	parser.add_argument('-O','--overwrite_output_files',default=False,action='store_true',help="Should we overwrite preexisting output files? (default is to add a number at the end)")
 	args = parser.parse_args()
@@ -418,12 +420,13 @@ if __name__ == '__main__':
 	#graph generator args begin
 	generator = GRAPH_FNS[args.graph_type[0]]
 	graph_generator_arguments = []
-	for arg in [args.graph_arg_0
-				,args.graph_arg_1,
+	for arg in [args.graph_arg_0,
+				args.graph_arg_1,
 				# add others here and in the parser (-1, -2, ...)
 				]:
 		if arg is not None:
 			graph_generator_arguments.append(arg[0])
+	embed_dgr = args.embedding_degree[0]
 	#end
 	#high level runner args begin
 	sample_pair_proportion = args.sample_pair_proportion[0]
@@ -447,12 +450,6 @@ if __name__ == '__main__':
 	for desc,val in zip(['max_paths','max_dist_scale','stop_on_first_failure'],[args.max_paths[0],args.max_dist_scale[0],stop_on_first_failure]):
 		if path_algorithm_str in PATH_ALGS_OPTIONS_USED_INV[desc]:
 			path_algorithm_kwargs.update({desc:val})
-	# node args begin
-	node_args = ()
-	if path_algorithm_str in HYPER_EMBED_PATH_ALGS:
-		q = args.hyper_embed_degree[0]
-		node_args += (q,)
-	# end
 
 	#aggregate runner kwargs
 	runner_kwargs = path_algorithm_kwargs
@@ -483,7 +480,7 @@ if __name__ == '__main__':
 		output = try_file
 
 	#get the results
-	results = run_many_pairs_on_many_random_graphs(graph_sizes,path_algorithm_str,generator,show_graph_progress,graph_generator_arguments,None,node_args,None,runner_kwargs)
+	results = run_many_pairs_on_many_random_graphs(graph_sizes,path_algorithm_str,generator,embed_dgr,show_graph_progress,graph_generator_arguments,None,None,runner_kwargs)
 
 	if output is None:
 		#output to stdout
