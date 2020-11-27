@@ -135,7 +135,7 @@ does NOT return (i.e. these need to be calculated later):
 
 this function will reset the graph after calculating the needed quantities
 '''
-def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,s:int,t:int,verbose=False,**kwargs):
+def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:str,s:int,t:int,validate:bool,**kwargs):
 	paths = []
 	if vd_path_alg == 'only-opt':
 		return 0,0,0#basically, running just the optimal lets us skip all of this
@@ -189,6 +189,10 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 			nodes_with_operations += 1
 		operations_this_pair += operations
 
+
+	if validate:
+		validate_returned_paths(G,paths,s,t)
+
 	return len(paths),nodes_with_operations,operations_this_pair
 
 '''
@@ -205,7 +209,7 @@ returns (mapping from metric string to tuple of mean and stdev)
 	optimal network usage (number of nodes) mean and standard deviation <only if "compare_to_opt" is true>
 	messages sent per node (among those that send messages) mean and standard deviation <only for decentralized algorithms>
 '''
-def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]], vd_path_alg:str, sample_pair_proportion=1., seed=None, max_npairs=float('inf'), compare_to_optimal=False, optimal_usage=False, **kwargs):
+def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]], vd_path_alg:str,validate_paths=False, sample_pair_proportion=1., seed=None, max_npairs=float('inf'), compare_to_optimal=False, optimal_usage=False, **kwargs):
 	np.random.seed(seed)
 	### SUMMARY STATS WILL BE CALCULATED ON THESE
 	num_paths_found_agg = []
@@ -225,7 +229,6 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]], vd_path_alg:s
 
 	#what will the pairs be?
 	pairs = pick_n_random_pairs(G,npairs)
-	print('pairs: {}'.format(len(pairs)))
 
 	nxG = convert_to_nx_graph(G)
 	Gp = None
@@ -246,25 +249,25 @@ def run_many_pairs(G:List[Union[TNNode,HyperNode,TNNode_Stepper]], vd_path_alg:s
 			exact_paths = vertex_disjoint_paths(nxG,s,t,retrace=True,Gp=Gp)
 			opt_num_nodes = sum([len(path)-1 for path in exact_paths]) + 1#don't count t for all of these -- just count it once
 			exact_total_paths = len(exact_paths)
-			print("DEBUG: {} paths exist between {} and {}, average length {:.0f}".format(exact_total_paths,s,t,opt_num_nodes/exact_total_paths))
+			# print("DEBUG: {} paths exist between {} and {}, average length {:.0f}".format(exact_total_paths,s,t,opt_num_nodes/exact_total_paths))
 		elif compare_to_optimal:
 			exact_total_paths = vertex_disjoint_paths(nxG,s,t,retrace=False)
 
 		#get the numbers for this pair
-		num_paths_found,num_nodes_used,num_messages_sent = run_single_pair(G,vd_path_alg,s,t,**kwargs)
+		num_paths_found,num_nodes_used,num_messages_sent = run_single_pair(G,vd_path_alg,s,t,validate_paths,**kwargs)
 
 		#throw them in the aggregators
 		num_paths_found_agg.append(num_paths_found)
 		num_nodes_used_agg.append(num_nodes_used)
 		if compare_to_optimal and optimal_usage:
 			optimal_usage_agg.append(opt_num_nodes)
-		elif compare_to_optimal:
+		if compare_to_optimal:
 			num_opt_paths_agg.append(exact_total_paths)
 		if vd_path_alg not in CENTRALIZED_PATH_ALGS:
 			if num_nodes_used != 0:
 				messages_sent_per_node_used_agg.append(float(num_messages_sent)/float(num_nodes_used))
 			else:
-				messages_sent_per_node_used_agg.append(float('inf'))
+				messages_sent_per_node_used_agg.append(0)
 
 		pairs_run += 1
 
@@ -339,8 +342,6 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,e
 		# calculate summary stats
 		num_paths_found_mean = np.mean(num_paths_found_agg)
 		num_paths_found_stdev = np.std(num_paths_found_agg,ddof=1)
-		num_opt_paths_mean = np.mean(num_opt_paths_agg)
-		num_opt_paths_stdev = np.std(num_opt_paths_agg,ddof=1)
 		num_nodes_used_mean = np.mean(num_nodes_used_agg)
 		num_nodes_used_stdev = np.std(num_nodes_used_agg,ddof=1)
 		tmp_res = {'num_paths_found_mean':num_paths_found_mean,
@@ -353,7 +354,9 @@ def run_many_pairs_on_many_random_graphs(graph_sizes,vd_path_alg:str,generator,e
 			optimal_usage_stdev = np.std(optimal_usage_agg,ddof=1)
 			tmp_res.update({'optimal_usage_mean':optimal_usage_mean,
 						'optimal_usage_stdev':optimal_usage_stdev})
-		elif compare_to_optimal:
+		if compare_to_optimal:
+			num_opt_paths_mean = np.mean(num_opt_paths_agg)
+			num_opt_paths_stdev = np.std(num_opt_paths_agg,ddof=1)
 			tmp_res.update({'num_opt_paths_mean':num_opt_paths_mean,
 							'num_opt_paths_stdev':num_opt_paths_stdev,})
 		if vd_path_alg not in CENTRALIZED_PATH_ALGS:
@@ -391,8 +394,7 @@ if __name__ == '__main__':
 	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
 	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=None,help="First graph generator argument (for ER graphs, this is the average degree, for directeds it's approximate reciprocity, for variable density, this is the scale)")
 	parser.add_argument('-1','--graph_arg_1',nargs=1,type=str,default=None,help="Second graph generator argument (for variable density, this is the name of the function (see util::generate_connected_variable_dense_ER_graph))")
-	parser.add_argument('-e','--embedding_degree',nargs=1,type=int,default=[3],
-						help="What degree should the embed addressing tree be? This must be at least 2.")
+	parser.add_argument('-e','--embedding_degree',nargs=1,type=int,default=[3],help="What degree should the embed addressing tree be? This must be at least 2.")
 	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
 	parser.add_argument('-l','--min_graph_size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
 	parser.add_argument('-b','--max_graph_size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
@@ -404,10 +406,11 @@ if __name__ == '__main__':
 	parser.add_argument('-u','--optimal_usage',default=False,action='store_true',help='Should we calculate the optimal network usage?')
 	parser.add_argument('-c', '--compare_to_optimal', default=False, action='store_true',help='Should we run max flow on the network at all?')
 	parser.add_argument('-M','--max_paths',nargs=1,type=float,default=[float('inf')],help='(VD path parameter): what is the maximum number of paths to find between s and t?')
-	parser.add_argument('-x','--max_dist_scale',nargs=1,type=float,default=[float('inf')],help='(Hyperbolic VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
+	parser.add_argument('-x','--max_dist_scale',nargs=1,type=float,default=[float('inf')],help='(embedded VD path parameter): what is the maximum distance from t as a multiple of the distance between s and t a node is allowed to be before it is not considered for routing?')
 	parser.add_argument('-f','--stop_on_first_failure',default=False,action='store_true',help='(VD path parameter): should we stop looking for paths as soon as we fail to get a return from one neighbor? (can be a performance increase, but will also lose some paths)')
 	parser.add_argument('-o','--output',nargs=1,type=str,default=None,help="What file should we output to? (defaults to stdout)")
 	parser.add_argument('-O','--overwrite_output_files',default=False,action='store_true',help="Should we overwrite preexisting output files? (default is to add a number at the end)")
+	parser.add_argument('-v','--validate_paths',default=False,action='store_true',help="Should we check that the paths are valid every time? (default does not check at all)")
 	args = parser.parse_args()
 
 	#reformat these in the way the program expects
