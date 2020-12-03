@@ -80,7 +80,7 @@ def vertex_disjoint_paths(G:nx.Graph,s,t,retrace=False,Gp=None) -> Union[List,in
 	#else reset (doesn't need to be done since the networkx functions all do that for us)
 	#then run max flow on that graph with the caveat that if we used the fork node transform on s we need to change the start to s
 	if 'f{}'.format(s) in Gp.nodes:
-		s = 'f{}'.format(s)#FIXME is this actually causing us to start at the right node?
+		s = 'f{}'.format(s)
 
 	R = nx.algorithms.flow.preflow_push(Gp,s,t,residual=Gp)#TODO maybe more optimizations here -- still looking at 67% of the time being spent in this fn
 	if retrace:

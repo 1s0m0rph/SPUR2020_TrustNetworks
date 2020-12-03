@@ -420,14 +420,14 @@ class n_adic(Rational):
 	'''
 	this is the descendent-ancestor weighted metric
 	'''
-	def dist_to_DA(self, other):
+	def dist_to_DA(self, other):#FIXME what all about this fails to match the progress report? (which is correct)
 		if self == other:  #both descendant and ancestor case
 			return -n_adic(1,self.n,None,n_adic_reduce=False)  #take this to mean (negative) infinity
 		s_anc_o = self.is_ancestor_of(other)
 		o_anc_s = other.is_ancestor_of(self)
 		#we know that not both of these ^^ are true at this point
 		if s_anc_o:
-			return n_adic(self.exp-other.exp,self.n,0,n_adic_reduce=False)  #-(e-d)
+			return n_adic(self.exp-other.exp,self.n,0,n_adic_reduce=False)  #-(e-d)#FIXME this part of the distance metric is wrong
 		elif o_anc_s:
 			return n_adic(other.exp-self.exp,self.n,0,n_adic_reduce=False)  #-(d-e)
 		else:
