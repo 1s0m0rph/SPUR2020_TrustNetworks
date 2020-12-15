@@ -47,7 +47,10 @@ def convert_nx_graph_to_TN(nxg:Union[nx.Graph,nx.DiGraph],node_type,embedding_al
 		#hyperbolic graphs must be built in a specific order (treelike) -- use a BFS tree to construct
 		retG = nx_bfs_tree_preordering_construct(nxg,retG,idx_map)
 	if embedding_algorithm is not None:
-		embedder = get_embedder(embedding_algorithm)(embed_dgr,**kwargs)
+		if embed_dgr is None:
+			embedder = get_embedder(embedding_algorithm)(**kwargs)
+		else:
+			embedder = get_embedder(embedding_algorithm)(embed_dgr,**kwargs)
 		retG = embedder.address_graph(retG)
 
 
