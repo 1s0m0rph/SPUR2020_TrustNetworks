@@ -14,7 +14,7 @@ class Embedder(ABC):
 	This is what we will use to annotate TNNodes
 	"""
 
-	EMBEDDINGS = ['hyperbolic','n-adic']
+	EMBEDDINGS = ['hyperbolic','n-adic','tree']
 
 	def __init__(self,etype,atype,dtype):
 		assert etype in self.EMBEDDINGS
@@ -43,6 +43,59 @@ class Embedder(ABC):
 	def address_graph(self,G:List[TNNode]):
 		pass
 
+
+class ArbitraryDegreeTreeEmbedder(Embedder,ABC):
+
+	def __init__(self,etype,atype,dtype):
+		super().__init__(etype,atype,dtype)
+
+
+	def get_adr_child(self,adr,i):
+		self.atype_check(adr)
+		ch = self.__gchld__(adr,i)
+		self.atype_check(ch)
+		return ch
+
+	def get_root(self):
+		r = self.__grt__()
+		self.atype_check(r)
+		return r
+
+	@abstractmethod
+	def __gchld__(self,adr,i):
+		pass
+
+	@abstractmethod
+	def __grt__(self):
+		pass
+
+
+	def address_graph(self,G:List[TNNode],root_idx=None):
+		if root_idx is None:
+			root_idx = random.randint(0,len(G)-1)#random unless otherwise specified
+		root_adr = self.get_root()
+		#bfs on G to assign the addresses
+		q = [G[root_idx]]
+		G[root_idx].address = root_adr
+		G[root_idx].adist = self.dist
+		#we'll use the assignment of an address as a seen flag
+		while len(q) > 0:
+			current = q.pop(0)
+
+			ai = 0
+			for v in current.neighbors:
+				if v.address is None:
+					v.address = self.__gchld__(current.address,ai)
+					v.adist = self.dist
+					ai += 1
+					q.append(v)
+
+
+		for v in G:
+			if (v.address is None) or (v.adist is None):
+				raise ValueError("Graph is not connected! Embedding incomplete.")
+
+		return G
 
 class TreeEmbedder(Embedder,ABC):
 	"""
@@ -529,8 +582,51 @@ def latex_n_adic_tree(n, depth):
 	print(s)
 
 
+def get_lnode_child(lnode:list,i:int):
+	assert(i >= 0)
+	return lnode + [i]
+
+def prefix_list(lnode_a:list,lnode_b:list):
+	p = []
+	for a,b in zip(lnode_a,lnode_b):
+		if a == b:
+			p.append(a)
+		else:
+			break
+	return p
+
+def prefix_len(lnode_a:list,lnode_b:list):
+	plen = 0
+	for a,b in zip(lnode_a,lnode_b):
+		if a == b:
+			plen += 1
+		else:
+			break
+	return plen
+
+def lnode_dist(lnode_a:list,lnode_b:list):
+	plen = prefix_len(lnode_a,lnode_b)
+	return len(lnode_a) + len(lnode_b) - (plen << 1)
+
+class GeneralTreeEmbedder(ArbitraryDegreeTreeEmbedder):
+
+	def __init__(self):
+		super().__init__('tree',list,int)
+
+	def __dist__(self,adrx,adry):
+		return lnode_dist(adrx,adry)
+
+	def __gchld__(self,adr,i):
+		return get_lnode_child(adr,i)
+
+	def __grt__(self):
+		return []
+
+
 def get_embedder(etype: str):
 	if etype == 'hyperbolic':
 		return Hyperbolic_Embedder
 	elif etype == 'n-adic':
 		return NAdic_Embedder
+	elif etype == 'tree':
+		return GeneralTreeEmbedder

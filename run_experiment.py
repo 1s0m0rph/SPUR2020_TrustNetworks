@@ -41,17 +41,20 @@ DECENTRALIZED_PATH_ALGS = ['TN-v2',
 						   'hyper',
 						   'hyper-neigh',
 						   'hyper-multi',
-						   'n-adic']
+						   'n-adic',
+						   'tree']
 
 HYPER_EMBED_PATH_ALGS = ['hyper',
 						 'hyper-neigh',
 						 'hyper-multi']
 
 EMBED_PATH_ALGS = ['hyper',#these use the Embedding class
-				   'n-adic']
+				   'n-adic',
+				   'tree']
 
 EMBED_ALGS = {'hyper':'hyperbolic',
-			  'n-adic':'n-adic'
+			  'n-adic':'n-adic',
+			  'tree':'tree',
 			  }#TODO implement the rest of the hyper algs in the high level code
 
 CENTRALIZED_PATH_ALGS = ['only-opt','local-mf']
@@ -120,6 +123,7 @@ path alg possibilities:
 	'local-mf':			hyper_VD_paths_local(hyperbolic graph, start, target, max distance scale = inf, distance measure = 'path', autoscale increment = none)
 	'only-opt':			vertex_disjoint_paths(nx graph, start, target)
 	'n-adic':			TNNode.vertex_blacklist_search_greedy(dest coordinates, npaths=inf, max distance scale = inf, stop on first fail = false)
+	'tree':				TNNode.vertex_blacklist_search_greedy(dest coordinates, npaths=inf, max distance scale = inf, stop on first fail = false)
 	(+more as they are added)
 
 
@@ -175,6 +179,8 @@ def run_single_pair(G:List[Union[TNNode,HyperNode,TNNode_Stepper]],vd_path_alg:s
 		num_paths_found, num_nodes_used = hyper_VD_paths_local(G,s,t,**kwargs)
 		return num_paths_found,num_nodes_used,0#message send calculation isn't done here since this is centralized
 	elif vd_path_alg == 'n-adic':
+		paths = G[s].vertex_blacklist_search_greedy(G[t].address,**kwargs)
+	elif vd_path_alg == 'tree':
 		paths = G[s].vertex_blacklist_search_greedy(G[t].address,**kwargs)
 	#ADD NEW ALGORITHM PATH GENERATION SEMANTTICS HERE
 	else:
@@ -394,7 +400,7 @@ if __name__ == '__main__':
 	parser.add_argument('-G','--graph_type',nargs=1,type=str,choices=GRAPH_TYPES,default=[GRAPH_TYPES[0]],help='What type of graph (generator) should be used?')
 	parser.add_argument('-0','--graph_arg_0',nargs=1,type=float,default=None,help="First graph generator argument (for ER graphs, this is the average degree, for directeds it's approximate reciprocity, for variable density, this is the scale)")
 	parser.add_argument('-1','--graph_arg_1',nargs=1,type=str,default=None,help="Second graph generator argument (for variable density, this is the name of the function (see util::generate_connected_variable_dense_ER_graph))")
-	parser.add_argument('-e','--embedding_degree',nargs=1,type=int,default=[3],help="What degree should the embed addressing tree be? This must be at least 2.")
+	parser.add_argument('-e','--embedding_degree',nargs=1,type=int,default=[None],help="What degree should the embed addressing tree be? This must be at least 2.")
 	parser.add_argument('-g','--num_graph_sizes',nargs=1,type=int,default=[10],help='How many different graph sizes will be used for testing')
 	parser.add_argument('-l','--min_graph_size',nargs=1,type=int,default=[10],help='Minimum graph size to test')
 	parser.add_argument('-b','--max_graph_size',nargs=1,type=int,default=[250],help='Maximum graph size to test')
